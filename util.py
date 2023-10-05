@@ -1,3 +1,6 @@
+import os
+import pickle
+
 import scipy.io
 import matplotlib.pyplot as plt
 import numpy as np
@@ -33,54 +36,26 @@ def plot_spikes(fluorescence_array, fps = 30):
     plt.grid(True)
 
     # Show the plot
-    plt.show()
+    # plt.show()
+
+    return plt
 
 
-import numpy
-import pandas as pd
-import scipy.io
+def safePlotsAsPNG(output_directory):
+    array_of_plots=[]
+    with open(r"./data/temp/array_of_plots.pkl", 'rb') as file:
+        array_of_plots = pickle.load(file)
 
-# function to load table variable from MAT-file from https://stackoverflow.com/questions/25853840/load-matlab-tables-in-python-using-scipy-io-loadmat
-def loadtablefrommat(matfilename, tablevarname, columnnamesvarname):
-    """
-    read a struct-ified table variable (and column names) from a MAT-file
-    and return pandas.DataFrame object.
-    """
 
-    # load file
-    mat = scipy.io.loadmat(matfilename)
+    # Ensure the output directory exists; create it if it doesn't
+    os.makedirs(output_directory, exist_ok=True)
 
-    # get table (struct) variable
-    tvar = mat.get(tablevarname)
-    data_desc = mat.get(columnnamesvarname)
-    types = tvar.dtype
-    fieldnames = types.names
+    # Iterate through the array_of_plots and save each image as a separate PNG file
+    for i, image_data in enumerate(array_of_plots):
+        file_path = os.path.join(output_directory, f"image_{i}.png")
 
-    # extract data (from table struct)
-    data = None
-    for idx in range(len(fieldnames)):
-        if fieldnames[idx] == 'data':
-            data = tvar[0][0][idx]
-            break;
+        with open(file_path, "wb") as file:
+            file.write(image_data)
 
-    # get number of columns and rows
-    numcols = data.shape[1]
-    numrows = data[0, 0].shape[0]
+        print(f"Saved image {i} to {file_path}")
 
-    # and get column headers as a list (array)
-    data_cols = []
-    for idx in range(numcols):
-        data_cols.append(data_desc[0, idx][0])
-
-    # create dict out of original table
-    table_dict = {}
-    for colidx in range(numcols):
-        rowvals = []
-        for rowidx in range(numrows):
-            rowval = data[0,colidx][rowidx][0]
-            if type(rowval) == numpy.ndarray and rowval.size > 0:
-                rowvals.append(rowval[0])
-            else:
-                rowvals.append(rowval)
-        table_dict[data_cols[colidx]] = rowvals
-    return pd.DataFrame(table_dict)
