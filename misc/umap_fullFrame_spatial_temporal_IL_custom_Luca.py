@@ -4,7 +4,6 @@ Created on Sun May 10 15:42:38 2020
 
 @author: Simon
 """
-import io
 import pickle
 
 import numpy as np
@@ -15,19 +14,15 @@ import umap
 import scipy.io as sio
 import matplotlib.pyplot as plt
 import seaborn as sns
-import os
 import pandas as pd
-
-from bokeh.plotting import figure, show, output_notebook
-from bokeh.models import HoverTool, ColumnDataSource, CategoricalColorMapper, CustomJS
-from bokeh.palettes import Spectral4
-
+import plotting
 import util
 
 # skips UMAP creation if false and takes dump
-createUMAP = False
+createUMAP = True
 # skips Spike Plot generation if false and takes dump
 generatePlots = False
+generateDiagnosticPlots = True
 plotImagesFolder = r'/C:/Users/koenig/Documents/GitHub/twoP/Playground/Luca/PlaygoundProject/data/temp/plot_images'
 
 allFiles = [r'../data/Umap_2530_2532_Array.mat']
@@ -69,17 +64,11 @@ for cFile in allFiles:
 
     # g.close
 
-    # Extract the 'UMAPmatrix' array from the loaded data
-    umap_matrix = g['UMAPmatrix']
+    # Extract the 'UMAPmatrix' array from the loaded data and create a Pandas DataFrame from 'UMAPmatrix'
+    umap_df = pd.DataFrame(g['UMAPmatrix'])
 
-    # Create a Pandas DataFrame from 'UMAPmatrix'
-    umap_df = pd.DataFrame(umap_matrix)
-
-    # Extract the 'matrixLegendArray' array from the loaded data
-    matrix_legend_array = g['matrixLegendArray']
-
-    # Create a Pandas DataFrame from 'matrixLegendArray'
-    matrix_legend_df = pd.DataFrame(matrix_legend_array,
+    # Extract the 'matrixLegendArray' array from the loaded data and create a Pandas DataFrame from 'matrixLegendArray'
+    matrix_legend_df = pd.DataFrame(g['matrixLegendArray'],
                                     columns=["Animal", "Recording", "Neuron", "NbFrames", "Task", "RedNeurons",
                                              "ChoiceAUCs", "IsChoiceSelect", "StimAUCs", "IsStimSelect"])
 
@@ -110,105 +99,42 @@ for cFile in allFiles:
     # temporal clusters
 
     # Convert the Matplotlib plots to base64-encoded PNGs
-    array_of_plots = []
+
     if (generatePlots):
         for i in range(umap_df.shape[0]):
-            # takes selected row (fluorescence data of one cell), makes it to an array and plots it
-            plt = util.plot_spikes(umap_df.iloc[i].values)
-            buf = io.BytesIO()
-            plt.savefig(buf, format='png', dpi=80)
-            buf.seek(0)
-            array_of_plots.append(buf.read())
-            plt.close()
-            print(i)
-
-        with open(r"../data/temp/array_of_plots.pkl", 'wb') as file:
-            pickle.dump(array_of_plots, file)
-
-    with open(r"../data/temp/array_of_plots.pkl", 'rb') as file:
-        array_of_plots = pickle.load(file)
+            plotting.plotAndSaveSpikes(i, umap_df, plotImagesFolder)
 
     tempUmapOut = pandas.DataFrame
+    umapObject = umap.UMAP
     if (createUMAP):
-        tempUmapOut = umap.UMAP(
-            n_neighbors=30,
+        umapObject = umap.UMAP(
+            n_neighbors=20,
             min_dist=0.0,
             n_components=2,
             random_state=42,
-        ).fit_transform(Y)
+        )
+        tempUmapOut = umapObject.fit_transform(Y)
         print('Umap vals: ' + str(tempUmapOut.shape))
 
         # for debugging, dumps data to save time
         with open(r"../data/temp/tempUmapOut.pkl", 'wb') as file:
             pickle.dump(tempUmapOut, file)
+        with open(r"../data/temp/umapObject.pkl", 'wb') as file:
+            pickle.dump(umapObject, file)
 
     with open(r"../data/temp/tempUmapOut.pkl", 'rb') as file:
         tempUmapOut = pickle.load(file)
+    with open(r"../data/temp/umapObject.pkl", 'rb') as file:
+        umapObject = pickle.load(file)
 
     cell_df = pd.DataFrame(tempUmapOut, columns=['x', 'y'])
     cell_df.index = range(len(cell_df))
     matrix_legend_df.index = range(len(matrix_legend_df))
     cell_df = cell_df.merge(matrix_legend_df, left_index=True, right_index=True)
     cell_df['Task'] = cell_df['Task'].astype(str)
-    # cell_df["Plot"]= array_of_plots
-    # Create a ColumnDataSource
-    datasource = ColumnDataSource(cell_df)
-    # Define color mapping
-    color_mapping = CategoricalColorMapper(factors=[str(x) for x in np.unique(cell_df['Task'])],
-                                           palette=Spectral4)
 
-    # Create the Bokeh figure
-    plot_figure = figure(
-        title='UMAP projection of Cells',
-        width=600,  # Use 'width' instead of 'plot_width'
-        height=600,  # Use 'height' instead of 'plot_height'
-        tools='pan, wheel_zoom, reset'
-    )
-
-    # Add a HoverTool to display the Matplotlib plot when hovering over a data point
-    plot_figure.add_tools(HoverTool(tooltips="""
-        <div>
-            <span style='font-size: 8px; color: #224499'>Neuron:</span>
-            <span style='font-size: 8px'>@Neuron</span>
-            <span style='font-size: 8px; color: #224499'>ChoiceAUCs:</span>
-            <span style='font-size: 8px'>@ChoiceAUCs</span>
-            <span style='font-size: 8px; color: #224499'>StimAUCs:</span>
-            <span style='font-size: 8px'>@StimAUCs</span>
-        </div>
-        
-        <div>
-            <img
-                src="file:///C:/Users/koenig/Documents/GitHub/twoP/Playground/Luca/PlaygoundProject/data/temp/plot_images/image_@{index}.png" height="100" alt="Image"
-                style="float: left; margin: 0px 15px 15px 0px;"
-                border="2"
-            />
-    </div>
-    """))
-
-    # Create a scatter plot
-    plot_figure.circle(
-        'x',
-        'y',
-        source=datasource,
-        fill_color={'field': 'Task', 'transform': color_mapping},
-        line_color={'field': 'Task', 'transform': color_mapping},
-        line_alpha=0.6,
-        fill_alpha=0.6,
-        size=4
-    )
-
-    # Define a JavaScript callback to open the Matplotlib plot when a data point is clicked
-    callback_code = """
-    var data_index = cb_data.index['1d'].indices[0];
-    var data_url = 'data:image/png;base64,' + btoa(array_of_plots[data_index]);
-    window.open(data_url, '_blank');
-    """
-
-    # Add the JavaScript callback to the plot
-    plot_figure.js_on_event('tap', CustomJS(code=callback_code))
-
-    # Show the plot
-    show(plot_figure)
+    # plots UMAP via Bokeh
+    plotting.plotBokeh(cell_df, Y)
 
     # show results
     cIdx = np.random.permutation(matrix_legend_df["Task"].size)
@@ -229,3 +155,6 @@ for cFile in allFiles:
     umap_data = np.column_stack((tempUmapOut, matrix_legend_df["Task"]))
     # file_name = os.path.basename(cFile)
     # sio.savemat(r'\\Naskampa\lts\2P_PuffyPenguin\2P_PuffyPenguin\Umap_Analysis\output_' + file_name, {'umap_data': umap_data})
+
+    if generateDiagnosticPlots:
+        (plotting.generateDiagnosticPlots(umapObject, Y))
