@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import umap.plot
+from bokeh.io import curdoc
 from bokeh.layouts import column
 from umap import plot, UMAP
 from bokeh.plotting import figure, show, output_notebook
@@ -8,6 +9,8 @@ from bokeh.models import HoverTool, ColumnDataSource, CategoricalColorMapper, Cu
 from bokeh.palettes import Spectral4
 import io
 import os
+
+import util
 
 
 def generateDiagnosticPlots(umapObject, data):
@@ -22,7 +25,11 @@ def generateDiagnosticPlots(umapObject, data):
     plt.show()
 
 
-def plotBokeh(dataFrame, data):
+def plotBokeh(dataFrame, data, spikePlotImagesPath, bokehShow=True):
+    dataFrame = dataFrame.sample(frac=1, random_state=42)
+
+    imagesPath = spikePlotImagesPath
+
     # Create a ColumnDataSource
     datasource = ColumnDataSource(dataFrame)
     # Define color mapping
@@ -32,13 +39,13 @@ def plotBokeh(dataFrame, data):
     # Create the Bokeh figure
     plot_figure = figure(
         title='UMAP projection of Cells',
-        width=600,  # Use 'width' instead of 'plot_width'
-        height=600,  # Use 'height' instead of 'plot_height'
+        width=600,
+        height=600,
         tools='pan, wheel_zoom, box_zoom,save, reset, help'
     )
 
     # Add a HoverTool to display the Matplotlib plot when hovering over a data point
-    plot_figure.add_tools(HoverTool(tooltips="""
+    plot_figure.add_tools(HoverTool(tooltips=f"""
         <div>
             <span style='font-size: 8px; color: #224499'>Neuron:</span>
             <span style='font-size: 8px'>@Neuron</span>
@@ -50,7 +57,7 @@ def plotBokeh(dataFrame, data):
 
         <div>
             <img
-                src="file:///C:/Users/koenig/Documents/GitHub/twoP/Playground/Luca/PlaygoundProject/data/temp/plot_images/image_@{index}.png" height="100" alt="Image"
+                src="file://{imagesPath}""" + """/image_@{index}.png" height="100" alt="Image"
                 style="float: left; margin: 0px 15px 15px 0px;"
                 border="2"
             />
@@ -58,7 +65,7 @@ def plotBokeh(dataFrame, data):
     """))
 
     # Create a scatter plot
-    plot_figure.circle(
+    plot_figure.scatter(
         'x',
         'y',
         source=datasource,
@@ -66,20 +73,24 @@ def plotBokeh(dataFrame, data):
         line_color={'field': 'Task', 'transform': color_mapping},
         line_alpha=0.6,
         fill_alpha=0.6,
-        size=4
+        size=4,
+        marker='circle'
     )
 
     # Define sliders for UMAP parameters
-    n_neighbors_slider = Slider(title="n_neighbors", start=1, end=30, step=1, value=15)
+    n_neighbors_slider = Slider(title="n_neighbors", start=5, end=50, step=1, value=20)
     min_dist_slider = Slider(title="min_dist", start=0.01, end=1.0, step=0.01, value=0.1)
 
     # Callback function to update UMAP when sliders change
     def update_umap(attr, old, new):
         n_neighbors = n_neighbors_slider.value
         min_dist = min_dist_slider.value
-        umap = UMAP(n_neighbors=n_neighbors, min_dist=min_dist)
-        umap_result = umap.fit_transform(data)
-        datasource.data = {'x': umap_result[:, 0], 'y': umap_result[:, 1]}
+        if False:
+            umap = UMAP(n_neighbors=n_neighbors, min_dist=min_dist)
+            umap_result = umap.fit_transform(data)
+        umap_result = util.getUMAPOut(data, os.path.abspath(r"./data/temp/umapOutParamDump.pkl").replace("\\", '/'),
+                                      n_neighbors=n_neighbors, min_dist=round(min_dist, 2))
+        datasource.data.update({'x': umap_result[:, 0], 'y': umap_result[:, 1]})
 
     # Attach the callback function to slider changes
     n_neighbors_slider.on_change('value', update_umap)
@@ -88,8 +99,12 @@ def plotBokeh(dataFrame, data):
     # Create a layout for the sliders and plot
     layout = column(n_neighbors_slider, min_dist_slider, plot_figure)
 
-    # Show the plot
-    show(layout)
+    if bokehShow:
+        # Show the plot
+        show(layout)
+    else:
+        # for Bokeh Server
+        curdoc().add_root(layout)
 
 
 def plotAndReturnSpikes(fluorescence_array, fps=30):
