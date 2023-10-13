@@ -33,6 +33,7 @@ def plotBokeh(dataFrames, datas, spikePlotImagesPath, dumpFilesPaths, titles, bo
 
     for title in titles:
         dataFrames[title] = dataFrames[title].sample(frac=1, random_state=42)
+        print(f"Dataframe {title}: \n{dataFrames[title]}")
 
     # Create a ColumnDataSource
     datasource = ColumnDataSource(pd.DataFrame.copy(dataFrames[startDropdownDataOption]))
@@ -108,9 +109,11 @@ def plotBokeh(dataFrames, datas, spikePlotImagesPath, dumpFilesPaths, titles, bo
         datasourceDf['x'],datasourceDf['y']=umap_result[:, 0],umap_result[:, 1]
         # datasource.data.update({'x': umap_result[:, 0], 'y': umap_result[:, 1]})
         if not (selectFilter.value == 'None'):
-            datasourceDf=datasourceDf[datasourceDf[selectFilter.value]]
+            datasourceDf=datasourceDf[~datasourceDf[selectFilter.value]]
+            print(datasourceDf)
             print(f"Data:{selectData.value} Filter: {selectFilter.value}, Length: {len(datasourceDf[selectFilter.value])} ")
         else:
+            print(datasourceDf)
             print(f"Data:{selectData.value} Filter: {selectFilter.value}, Length: {len(datasourceDf[optionsSelectFilter[1]])}")
         # Update the existing datasource
         datasource.data.update(ColumnDataSource(datasourceDf).data)

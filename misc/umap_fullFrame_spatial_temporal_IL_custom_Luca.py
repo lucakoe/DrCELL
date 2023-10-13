@@ -68,7 +68,7 @@ for cFile in allFiles:
             cleanedDatas[title] = cleanedData[matrixLegendDf["IsStimSelect"]]
             matrixLegendDfs[title] = matrixLegendDf[matrixLegendDf["IsStimSelect"]]
 
-
+        print(f"Cleaned Data {title}: \n{cleanedDatas[title]}")
 
         dumpFilesPaths[title] = os.path.abspath(os.path.join(dumpFilesPath, title + umapOutParamDumpFilenameExtention))
 
@@ -105,8 +105,8 @@ for cFile in allFiles:
         cellDfs[title] = pd.DataFrame(tempUmapOut, columns=['x', 'y'])
         # creates an index for merging
         cellDfs[title].index = range(len(cellDfs[title]))
-        matrixLegendDf.index = range(len(matrixLegendDf))
-        cellDfs[title] = cellDfs[title].merge(matrixLegendDf, left_index=True, right_index=True)
+        matrixLegendDfs[title].index = range(len(matrixLegendDfs[title]))
+        cellDfs[title] = cellDfs[title].merge(matrixLegendDfs[title], left_index=True, right_index=True)
         cellDfs[title]['Task'] = cellDfs[title]['Task'].astype(str)
 
     # plots UMAP via Bokeh
