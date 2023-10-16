@@ -44,7 +44,7 @@ def plotBokeh(dataFrames, datas, spikePlotImagesPath, dumpFilesPaths, titles, bo
     datasource = ColumnDataSource(pd.DataFrame.copy(dataFrames[startDropdownDataOption]))
 
     # Define color mapping
-    umapColorMapping = CategoricalColorMapper(
+    colorMapping = CategoricalColorMapper(
         factors=[str(x) for x in np.unique(dataFrames[startDropdownDataOption]['Task'])],
         palette=Spectral4)
 
@@ -83,8 +83,8 @@ def plotBokeh(dataFrames, datas, spikePlotImagesPath, dumpFilesPaths, titles, bo
         'x',
         'y',
         source=datasource,
-        fill_color={'field': 'Task', 'transform': umapColorMapping},
-        line_color={'field': 'Task', 'transform': umapColorMapping},
+        fill_color={'field': 'Task', 'transform': colorMapping},
+        line_color={'field': 'Task', 'transform': colorMapping},
         line_alpha="alpha",
         fill_alpha="alpha",
         size=4,
@@ -107,15 +107,17 @@ def plotBokeh(dataFrames, datas, spikePlotImagesPath, dumpFilesPaths, titles, bo
         for value in np.unique(dataFrames[startDropdownDataOption][option]):
             optionsFilterMultiChoiceValues[f"{option} == {value}"]=(option,value)
 
-
+    optionsSelectColorValues = {"Tasks": ("Task", 1)}
+    optionsSelectColorValues.update(optionsFilterMultiChoiceValues.copy())
 
 
     optionsFilterMultiChoice = list(optionsFilterMultiChoiceValues.keys())
-
+    optionsSelectColor=list(optionsSelectColorValues.keys())
 
 
     # Create the Select widget
     selectData = Select(title="Data:", value=startDropdownDataOption, options=optionsSelectData)
+    selectColor = Select(title="Color:", value=optionsSelectColor[0], options=optionsSelectColor)
 
     # Create a MultiChoice widget with the options
     filterMultiChoice = MultiChoice(title="Filter:", value=[], options=optionsFilterMultiChoice)
@@ -124,11 +126,11 @@ def plotBokeh(dataFrames, datas, spikePlotImagesPath, dumpFilesPaths, titles, bo
     highlightClusterCheckbox = Checkbox(label="Highlight Cluster", active=False)
 
     # Create a color bar for the color mapper
-    color_bar = ColorBar(title="Task",color_mapper=umapColorMapping, location=(0, 0))
+    color_bar = ColorBar(title="Task",color_mapper=colorMapping, location=(0, 0))
     # Add the color bar to the figure
     plot_figure.add_layout(color_bar, 'below')
 
-    umapLayout = column(n_neighbors_slider, min_dist_slider, selectData, filterMultiChoice,
+    umapLayout = column(n_neighbors_slider, min_dist_slider, selectData, selectColor, filterMultiChoice,
                         min_cluster_size_slider,highlightClusterCheckbox, select_cluster_slider,  plot_figure)
 
     # Callback function to update UMAP when sliders change
@@ -205,6 +207,21 @@ def plotBokeh(dataFrames, datas, spikePlotImagesPath, dumpFilesPaths, titles, bo
             f"Clusters: {clusterNumber}, Clustered: {percentage}%, Clustered/Unclustered Ratio: {ratio}, Clustered: {clustered_count}, Unclustered: {unclustered_count}"
         )
 
+        #Change Color
+        nonlocal colorMapping
+
+        colorMapping = CategoricalColorMapper(factors=[str(x) for x in np.unique(datasourceDf[optionsSelectColorValues[selectColor.value][0]])],palette=Spectral4)
+        datasource.data['fill_color']={'field': optionsSelectColorValues[selectColor.value][0], 'transform': colorMapping}
+        datasource.data['line_color']={'field': optionsSelectColorValues[selectColor.value][0], 'transform': colorMapping}
+        color_bar.color_mapper=colorMapping
+
+
+
+
+
+
+
+
         print("\n")
 
         datasource.data.update(datasource.data)
@@ -216,6 +233,7 @@ def plotBokeh(dataFrames, datas, spikePlotImagesPath, dumpFilesPaths, titles, bo
     min_cluster_size_slider.on_change('value', update_umap)
     # Attach the callback function to the dropdown menu
     selectData.on_change('value', update_umap)
+    selectColor.on_change('value', update_umap)
     # Attach the callback function to the MultiChoice's "value" property
     filterMultiChoice.on_change('value', update_umap)
     # Attach the callback to the checkbox
