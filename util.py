@@ -135,3 +135,47 @@ def loadAndPreprocessData(cFile):
 
     # temporal clusters
     return umapDf, matrixLegendDf, Y
+
+
+
+import colorsys
+
+def generate_color_palette(num_colors):
+    """
+    Generate a list of distinct colors based on the number of colors needed.
+
+    Args:
+        num_colors (int): The number of colors to generate.
+
+    Returns:
+        list: A list of distinct colors in hexadecimal format, e.g., ['#FF0000', '#00FF00', ...]
+    """
+
+    def rgb_to_hex(rgb):
+        """
+        Convert an RGB color tuple to a hexadecimal color string.
+
+        Args:
+            rgb (tuple): An RGB color tuple, e.g., (255, 0, 0).
+
+        Returns:
+            str: Hexadecimal color string, e.g., '#FF0000'.
+        """
+        # Ensure the RGB values are integers
+        r, g, b = [int(x) for x in rgb]
+        return '#{:02X}{:02X}{:02X}'.format(r, g, b)
+
+    if num_colors <= 0:
+        return []
+
+    # Create a list of evenly spaced hue values
+    hue_values = [i / num_colors for i in range(num_colors)]
+
+    # Convert hue to RGB colors
+    colors = [rgb_to_hex(colorsys.hsv_to_rgb(hue, 1, 1)) for hue in hue_values]
+
+    return colors
+
+
+
+

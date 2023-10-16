@@ -7,6 +7,8 @@ Created on Sun May 10 15:42:38 2020
 import os
 import sys
 
+import hdbscan
+
 projectPath = r"C:\Users\koenig\Documents\GitHub\twoP\Playground\Luca\PlaygoundProject"
 # change working directory, because Bokeh Server doesnt recognize it otherwise
 os.chdir(os.path.join(projectPath, "misc"))
@@ -29,6 +31,7 @@ import util
 generateAndSaveSpikePlots = False
 generateDiagnosticPlots = False
 generateUMAPParameters = False
+debugging = False
 spikePlotImagesPath = r'/C:/Users/koenig/Documents/GitHub/twoP/Playground/Luca/PlaygoundProject/data/temp/plot_images'
 dumpFilesPath = r"../data/temp/"
 # spikePlotImagesPath=os.path.join(spikePlotImagesPath, title)
@@ -56,19 +59,23 @@ for cFile in allFiles:
         cleanedDatas[title] = cleanedData
         matrixLegendDfs[title] = matrixLegendDf
 
-        if title == "excludeChoiceUnselectBefore":
-            print(matrixLegendDf["IsChoiceSelect"].apply(lambda x: x).sum())
+        if title == "all":
+            print(f"{title} Data Length: {len(matrixLegendDf)}")
+
+        elif title == "excludeChoiceUnselectBefore":
             # Filters cells with Property
             cleanedDatas[title] = cleanedData[matrixLegendDf["IsChoiceSelect"]]
             matrixLegendDfs[title] = matrixLegendDf[matrixLegendDf["IsChoiceSelect"]]
+            print(f"{title} Data Length: {matrixLegendDf['IsChoiceSelect'].apply(lambda x: x).sum()}")
 
         elif title == "excludeStimUnselectBefore":
-            print(matrixLegendDf["IsStimSelect"].apply(lambda x: x).sum())
             # Filters cells with Property
             cleanedDatas[title] = cleanedData[matrixLegendDf["IsStimSelect"]]
             matrixLegendDfs[title] = matrixLegendDf[matrixLegendDf["IsStimSelect"]]
+            print(f"{title} Data Length: {matrixLegendDf['IsStimSelect'].apply(lambda x: x).sum()}")
 
-        print(f"Cleaned Data {title}: \n{cleanedDatas[title]}")
+
+        if debugging: print(f"Cleaned Data {title}: \n{cleanedDatas[title]}")
 
         dumpFilesPaths[title] = os.path.abspath(os.path.join(dumpFilesPath, title + umapOutParamDumpFilenameExtention))
 
@@ -88,19 +95,23 @@ for cFile in allFiles:
             for n_neighbors_value in n_neighbors_values:
                 for min_dist_value in min_dist_values:
                     for n_components_value in n_components_values:
-                        util.getUMAPOut(cleanedData,
+                        util.getUMAPOut(cleanedDatas[title],
                                         os.path.abspath(dumpFilesPaths[title]),
                                         n_neighbors=n_neighbors_value,
                                         min_dist=min_dist_value, n_components=n_components_value)
 
         # gets the UMAP Output file. This function is used to buffer already created UMAPs and improve performance
         print(os.path.abspath(dumpFilesPaths[title]))
-        tempUmapOut = util.getUMAPOut(cleanedData,
+        tempUmapOut = util.getUMAPOut(cleanedDatas[title],
                                       os.path.abspath(dumpFilesPaths[title]).replace(
                                           "\\", '/'),
                                       n_neighbors=20, min_dist=0.0, n_components=2)
 
         print('Umap vals: ' + str(tempUmapOut.shape))
+
+        # Apply HDBSCAN clustering
+        clusterer = hdbscan.HDBSCAN(min_cluster_size=5, min_samples=1)
+        clusters = clusterer.fit_predict(tempUmapOut)
 
         cellDfs[title] = pd.DataFrame(tempUmapOut, columns=['x', 'y'])
         # creates an index for merging
@@ -108,6 +119,8 @@ for cFile in allFiles:
         matrixLegendDfs[title].index = range(len(matrixLegendDfs[title]))
         cellDfs[title] = cellDfs[title].merge(matrixLegendDfs[title], left_index=True, right_index=True)
         cellDfs[title]['Task'] = cellDfs[title]['Task'].astype(str)
+        # Add cluster labels to your dataframe
+        cellDfs[title]['Cluster'] = clusters
 
     # plots UMAP via Bokeh
     plotting.plotBokeh(cellDfs, cleanedDatas, spikePlotImagesPath, dumpFilesPaths, titles, bokehShow=bokehShow,
@@ -135,6 +148,3 @@ for cFile in allFiles:
 
     if generateDiagnosticPlots:
         (plotting.generateDiagnosticPlots(umapObject, cleanedData))
-
-
-
