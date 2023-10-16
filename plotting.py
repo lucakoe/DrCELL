@@ -9,7 +9,8 @@ from bokeh.layouts import column
 from colorcet import fire
 from umap import plot, UMAP
 from bokeh.plotting import figure, show, output_notebook
-from bokeh.models import HoverTool, ColumnDataSource, CategoricalColorMapper, CustomJS, Slider, Select, Checkbox
+from bokeh.models import HoverTool, ColumnDataSource, CategoricalColorMapper, CustomJS, Slider, Select, Checkbox, \
+    MultiChoice, ColorBar
 from bokeh.palettes import Spectral4, Spectral11
 import io
 import os
@@ -32,6 +33,7 @@ def generateDiagnosticPlots(umapObject, data):
 def plotBokeh(dataFrames, datas, spikePlotImagesPath, dumpFilesPaths, titles, bokehShow=True,
               startDropdownDataOption="all", debug=False):
     imagesPath = spikePlotImagesPath
+    dataVariables=["IsChoiceSelect", "IsStimSelect", "RedNeurons", "Task"]
 
     for title in titles:
         dataFrames[title] = dataFrames[title].sample(frac=1, random_state=42)
@@ -48,7 +50,7 @@ def plotBokeh(dataFrames, datas, spikePlotImagesPath, dumpFilesPaths, titles, bo
 
     # Create the Bokeh figure
     plot_figure = figure(
-        title='UMAP projection of Cells',
+        title='UMAP projection of Neurons',
         width=600,
         height=600,
         tools='pan, wheel_zoom, box_zoom,save, reset, help'
@@ -95,21 +97,39 @@ def plotBokeh(dataFrames, datas, spikePlotImagesPath, dumpFilesPaths, titles, bo
     select_cluster_slider = Slider(title="cluster", start=-1,
                                    end=len(np.unique(dataFrames[startDropdownDataOption]['Cluster'])), step=1, value=0,
                                    disabled=True)
-    min_cluster_size_slider = Slider(title="min_cluster_size", start=1, end=50, step=1, value=5, disabled=True)
+    min_cluster_size_slider = Slider(title="min_cluster_size", start=1, end=50, step=1, value=5, disabled=False)
 
     # Define the options for the dropdown menu
     optionsSelectData = titles
-    optionsSelectFilter = ["None", "IsChoiceSelect", "IsStimSelect"]
+
+    optionsFilterMultiChoiceValues={}
+    for option in dataVariables:
+        for value in np.unique(dataFrames[startDropdownDataOption][option]):
+            optionsFilterMultiChoiceValues[f"{option} == {value}"]=(option,value)
+
+
+
+
+    optionsFilterMultiChoice = list(optionsFilterMultiChoiceValues.keys())
+
+
 
     # Create the Select widget
     selectData = Select(title="Data:", value=startDropdownDataOption, options=optionsSelectData)
-    selectFilter = Select(title="Filter:", value="None", options=optionsSelectFilter)
+
+    # Create a MultiChoice widget with the options
+    filterMultiChoice = MultiChoice(title="Filter:", value=[], options=optionsFilterMultiChoice)
 
     # Create a Checkbox widget
     highlightClusterCheckbox = Checkbox(label="Highlight Cluster", active=False)
 
-    umapLayout = column(n_neighbors_slider, min_dist_slider, selectData, selectFilter,
-                        highlightClusterCheckbox, select_cluster_slider, min_cluster_size_slider, plot_figure)
+    # Create a color bar for the color mapper
+    color_bar = ColorBar(title="Task",color_mapper=umapColorMapping, location=(0, 0))
+    # Add the color bar to the figure
+    plot_figure.add_layout(color_bar, 'below')
+
+    umapLayout = column(n_neighbors_slider, min_dist_slider, selectData, filterMultiChoice,
+                        min_cluster_size_slider,highlightClusterCheckbox, select_cluster_slider,  plot_figure)
 
     # Callback function to update UMAP when sliders change
 
@@ -125,16 +145,16 @@ def plotBokeh(dataFrames, datas, spikePlotImagesPath, dumpFilesPaths, titles, bo
                                       n_neighbors=n_neighbors, min_dist=round(min_dist, 2))
         datasourceDf['x'], datasourceDf['y'] = umap_result[:, 0], umap_result[:, 1]
         # datasource.data.update({'x': umap_result[:, 0], 'y': umap_result[:, 1]})
-        if not (selectFilter.value == 'None'):
-            datasourceDf = datasourceDf[~datasourceDf[selectFilter.value]]
-            print(
-                f"Data: {selectData.value}, Filter: {selectFilter.value}, Length: {len(datasourceDf[selectFilter.value])} ")
+        if len(filterMultiChoice.value) != 0:
+            for option in filterMultiChoice.value:
+                datasourceDf = datasourceDf[datasourceDf[optionsFilterMultiChoiceValues[option][0]]==optionsFilterMultiChoiceValues[option][1]]
 
-            print(f"Cluster: {select_cluster_slider.value}")
-        else:
-            print(
-                f"Data: {selectData.value}, Filter: {selectFilter.value}, Length: {len(datasourceDf[optionsSelectFilter[1]])}")
-            print(f"Cluster: {select_cluster_slider.value}")
+                if debug: print(type(datasourceDf[optionsFilterMultiChoiceValues[option][0]]))
+                if debug: print(type(optionsFilterMultiChoiceValues[option][1]))
+                if debug: print(datasourceDf[optionsFilterMultiChoiceValues[option][0]])
+
+        print(f"Data: {selectData.value}, Filter: {filterMultiChoice.value}, Length: {len(datasourceDf)}")
+        if debug: print(datasourceDf)
         umap_result = datasourceDf[['x', 'y']].values
 
         clusters = []
@@ -153,20 +173,39 @@ def plotBokeh(dataFrames, datas, spikePlotImagesPath, dumpFilesPaths, titles, bo
         datasource.data.update(ColumnDataSource(datasourceDf).data)
         if highlightClusterCheckbox.active:
             select_cluster_slider.disabled = False
-            min_cluster_size_slider.disabled = False
             for i, cluster in enumerate(datasourceDf['Cluster']):  # Assuming cluster_data is a list of cluster labels
                 if cluster == select_cluster_slider.value:
                     datasource.data['alpha'][i] = 1  # Make points in the selected cluster fully visible
                 else:
                     datasource.data['alpha'][i] = 0.1  # Make points in other clusters more transparent
+                print(f"Current Cluster: {select_cluster_slider.value}")
         else:
             select_cluster_slider.disabled = True
-            min_cluster_size_slider.disabled = True
 
             for i, cluster in enumerate(datasourceDf['Cluster']):  # Assuming cluster_data is a list of cluster labels
                 datasource.data['alpha'][i] = 1  # Make points in the selected cluster fully visible
 
-        print(f"Clusters: {len(np.unique(datasourceDf['Cluster']))-1}, Clustered/Unclustered Ratio: {len(datasourceDf[datasourceDf['Cluster']==-1])/len(datasourceDf[datasourceDf['Cluster']!=-1])}, Clustered: {len(datasourceDf[datasourceDf['Cluster']!=-1])}, Unclustered: {len(datasourceDf[datasourceDf['Cluster']==-1])}")
+        clustered_count = len(datasourceDf[datasourceDf['Cluster'] != -1])
+        unclustered_count = len(datasourceDf[datasourceDf['Cluster'] == -1])
+
+        # Check if the denominator (unclustered_count) is zero
+        if unclustered_count == 0:
+            ratio = "N/A"
+        else:
+            ratio = round(clustered_count / unclustered_count,3)
+        # Check if the denominator (unclustered_count) is zero
+        if len(datasourceDf) == 0:
+            percentage = "N/A"
+            clusterNumber = 0
+        else:
+            percentage = round((clustered_count/len(datasourceDf))*100,2)
+            clusterNumber=len(np.unique(datasourceDf['Cluster'])) - 1
+
+        print(
+            f"Clusters: {clusterNumber}, Clustered: {percentage}%, Clustered/Unclustered Ratio: {ratio}, Clustered: {clustered_count}, Unclustered: {unclustered_count}"
+        )
+
+        print("\n")
 
         datasource.data.update(datasource.data)
 
@@ -177,7 +216,8 @@ def plotBokeh(dataFrames, datas, spikePlotImagesPath, dumpFilesPaths, titles, bo
     min_cluster_size_slider.on_change('value', update_umap)
     # Attach the callback function to the dropdown menu
     selectData.on_change('value', update_umap)
-    selectFilter.on_change('value', update_umap)
+    # Attach the callback function to the MultiChoice's "value" property
+    filterMultiChoice.on_change('value', update_umap)
     # Attach the callback to the checkbox
     highlightClusterCheckbox.on_change('active', update_umap)
 

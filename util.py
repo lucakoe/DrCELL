@@ -111,6 +111,7 @@ def loadAndPreprocessData(cFile):
     # Convert Float to Boolean
     matrixLegendDf["IsStimSelect"] = matrixLegendDf["IsStimSelect"].apply(lambda x: x >= 1.0)
     matrixLegendDf["IsChoiceSelect"] = matrixLegendDf["IsChoiceSelect"].apply(lambda x: x >= 1.0)
+    matrixLegendDf["RedNeurons"] = matrixLegendDf["RedNeurons"].apply(lambda x: x >= 1.0)
 
     useIdx = np.invert(np.isnan(np.sum(Y, axis=0)))
     Y = Y[:, useIdx]
