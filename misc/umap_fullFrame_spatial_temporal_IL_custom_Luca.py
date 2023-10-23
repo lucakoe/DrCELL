@@ -33,7 +33,7 @@ generateDiagnosticPlots = False
 generateUMAPParameters = False
 debugging = False
 experimental = False
-spikePlotImagesPath = r'/C:/Users/koenig/Documents/GitHub/twoP/Playground/Luca/PlaygoundProject/data/temp/plot_images'
+spikePlotImagesPath = r'C:/Users/koenig/Documents/GitHub/twoP/Playground/Luca/PlaygoundProject/data/temp/plot_images'
 dumpFilesPath = r"../data/temp/"
 # spikePlotImagesPath=os.path.join(spikePlotImagesPath, title)
 umapOutParamDumpFilenameExtention = "_umapOutParamDump.pkl"
@@ -81,7 +81,7 @@ for cFile in allFiles:
 
         # Convert the Matplotlib plots to base64-encoded PNGs
 
-        if (generateAndSaveSpikePlots):
+        if (generateAndSaveSpikePlots) and title=="all":
             for i in range(umapDf.shape[0]):
                 plotting.plotAndSaveSpikes(i, umapDf, spikePlotImagesPath)
 
