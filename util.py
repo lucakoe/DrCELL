@@ -213,22 +213,23 @@ def generateGrid(minPoint,maxPoint, centerPoint=(0.0,0.0),grid_size_x=1, grid_si
 def assign_points_to_grid(points_df, grid_df, new_collumn_grid_df_name_and_property=[('index','pointIndices')]):
     # Initialize a new column in the grid DataFrame to store point indices
     for name_and_property in new_collumn_grid_df_name_and_property:
-        grid_df[name_and_property[1]] = [[] for _ in range(len(grid_df))]
+        grid_df[name_and_property[1]] = None
 
-    for index, point in points_df.iterrows():
-        x, y = point['x'], point['y']
 
-        # Find the grid square that contains the point
-        grid_square = grid_df[(grid_df['gridX'] <= x) & (grid_df['gridY'] <= y) &
-                              (grid_df['gridX'] + grid_df['gridSizeX'] >= x) &
-                              (grid_df['gridY'] + grid_df['gridSizeY'] >= y)]
+    for index, grid_row in grid_df.iterrows():
+        x1, y1 = grid_row['gridX'], grid_row['gridY']
+        x2, y2 = x1 + grid_row['gridSizeX'], y1 + grid_row['gridSizeY']
 
-        if not grid_square.empty:
-            grid_index = grid_square.index[0]
-            for name_and_property in new_collumn_grid_df_name_and_property:
-                if name_and_property[0]=='index':
-                    grid_df.at[grid_index,  name_and_property[1]].append(index)
-                else:
-                    grid_df.at[grid_index, name_and_property[1]].append(points_df[name_and_property[0]])
+        # Find the points within the current grid cell
+        points_in_grid = points_df[(points_df['x'] >= x1) & (points_df['x'] < x2) &
+                                   (points_df['y'] >= y1) & (points_df['y'] < y2)]
+
+
+        for name_and_property in new_collumn_grid_df_name_and_property:
+            if name_and_property[0] == 'index':
+                grid_df.at[index, name_and_property[1]]=points_in_grid.index
+            else:
+                grid_df.at[index, name_and_property[1]]=points_in_grid[name_and_property[0]]
+
 
     return grid_df

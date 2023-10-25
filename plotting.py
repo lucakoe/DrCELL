@@ -130,8 +130,7 @@ def plotBokeh(dataFrames, datas, spikePlotImagesPath, dumpFilesPaths, titles, bo
     </div>
     <div>
         <img src="data:image/png;base64, @{image}" style="float: left; margin: 0px 15px 15px 0px; width: 100px; height: auto;">
-        <span style="font-size: 12px; color: #333;">X: @x</span><br>
-        <span style="font-size: 12px; color: #333;">Y: @y</span>
+
     </div>
            
     </div>
@@ -393,11 +392,19 @@ def plotBokeh(dataFrames, datas, spikePlotImagesPath, dumpFilesPaths, titles, bo
             gridDatasourceDf['gridSizeX'] = gridSizeX
             gridDatasourceDf['gridSizeY'] = gridSizeY
             gridDatasourceDf['alpha'] = 0.1
-            gridDatasourceDf = util.assign_points_to_grid(datasourceDf, gridDatasourceDf)
+            gridDatasourceDf = util.assign_points_to_grid(datasourceDf, gridDatasourceDf, [('index','pointIndices'), ("Neuron","pointNeurons")])
+
             gridDatasource.data.update(ColumnDataSource(gridDatasourceDf).data)
 
         gridPlot.visible=enableGridCheckbox.active
 
+    def hover_callback(attr, old_index, new_index):
+        if new_index:
+            selected_data = gridDatasource.data
+            selected_x = selected_data['x'][new_index[0]]
+            selected_y = selected_data['y'][new_index[0]]
+            selected_index = selected_data['index'][new_index[0]]
+            print(f"Hovered over data point at x={selected_x}, y={selected_y}, index={selected_index}")
 
     # Attach the callback function to slider changes
     n_neighbors_slider.on_change('value_throttled', update_umap)
@@ -424,6 +431,9 @@ def plotBokeh(dataFrames, datas, spikePlotImagesPath, dumpFilesPaths, titles, bo
     # Attach the callback to the checkbox
     highlightClusterCheckbox.on_change('active', updateCurrentCluster)
 
+    gridDatasource.selected.on_change('indices', hover_callback)
+
+
     plot_figure.on_event(Tap, on_point_click)
 
     # Create a layout for the sliders and plot
@@ -441,8 +451,6 @@ def plotAndReturnSpikes(fluorescence_array, fps=30, number_consecutive_recording
     # interactive view
 
     # Calculate time values based on the frame rate (30 fps)
-    fluorescence_array
-
     n = len(fluorescence_array)
     time_values = np.arange(n) / fps
 
