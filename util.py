@@ -178,5 +178,57 @@ def generate_color_palette(num_colors):
     return colors
 
 
+def generateGrid(minPoint,maxPoint, centerPoint=(0.0,0.0),grid_size_x=1, grid_size_y = 1):
+    # Define grid parameters
+    center_x = centerPoint[0]  # Center x-coordinate of the grid
+    center_y = centerPoint[1]  # Center y-coordinate of the grid
+    min_x = minPoint[0]  # Minimum x-coordinate
+    max_x = maxPoint[0]  # Maximum x-coordinate
+    min_y = minPoint[1]  # Minimum y-coordinate
+    max_y = maxPoint[1]  # Maximum y-coordinate
+
+    # Calculate the number of grid lines in each direction
+    num_x_lines_left = int((center_x - min_x) / grid_size_x)
+    num_x_lines_right = int((max_x - center_x) / grid_size_x)
+    num_y_lines_top = int((max_y - center_y) / grid_size_y)
+    num_y_lines_bottom = int((center_y - min_y) / grid_size_y)
 
 
+    # Generate data points for the grid and centers of squares
+    grid_data = {'gridID': [], 'gridX': [], 'gridY': [], 'centerX': [], 'centerY': []}
+    current_id=0
+    for i in range(-(num_x_lines_left+1), num_x_lines_right + 1):
+        for j in range(-(num_y_lines_bottom+1), num_y_lines_top + 1):
+            current_id+=1
+            x = center_x + i * grid_size_x
+            y = center_y + j * grid_size_y
+            grid_data['gridID'].append(current_id)
+            grid_data['gridX'].append(x)
+            grid_data['gridY'].append(y)
+            grid_data['centerX'].append(x + grid_size_x / 2)
+            grid_data['centerY'].append(y + grid_size_y / 2)
+
+    return pd.DataFrame(grid_data)
+
+def assign_points_to_grid(points_df, grid_df, new_collumn_grid_df_name_and_property=[('index','pointIndices')]):
+    # Initialize a new column in the grid DataFrame to store point indices
+    for name_and_property in new_collumn_grid_df_name_and_property:
+        grid_df[name_and_property[1]] = [[] for _ in range(len(grid_df))]
+
+    for index, point in points_df.iterrows():
+        x, y = point['x'], point['y']
+
+        # Find the grid square that contains the point
+        grid_square = grid_df[(grid_df['gridX'] <= x) & (grid_df['gridY'] <= y) &
+                              (grid_df['gridX'] + grid_df['gridSizeX'] >= x) &
+                              (grid_df['gridY'] + grid_df['gridSizeY'] >= y)]
+
+        if not grid_square.empty:
+            grid_index = grid_square.index[0]
+            for name_and_property in new_collumn_grid_df_name_and_property:
+                if name_and_property[0]=='index':
+                    grid_df.at[grid_index,  name_and_property[1]].append(index)
+                else:
+                    grid_df.at[grid_index, name_and_property[1]].append(points_df[name_and_property[0]])
+
+    return grid_df

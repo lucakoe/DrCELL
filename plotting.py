@@ -11,7 +11,7 @@ from colorcet import fire
 from umap import plot, UMAP
 from bokeh.plotting import figure, show, output_notebook
 from bokeh.models import HoverTool, ColumnDataSource, CategoricalColorMapper, CustomJS, Slider, Select, Checkbox, \
-    MultiChoice, ColorBar, TextInput, CustomAction, TapTool, CheckboxGroup, RadioGroup, Div
+    MultiChoice, ColorBar, TextInput, CustomAction, TapTool, CheckboxGroup, RadioGroup, Div, Button
 from bokeh.palettes import Spectral4, Spectral11
 import io
 import os
@@ -42,31 +42,73 @@ def plotBokeh(dataFrames, datas, spikePlotImagesPath, dumpFilesPaths, titles, bo
         if debug: print(f"Dataframe {title}: \n{dataFrames[title]}")
         dataFrames[title]['alpha'] = 1.0
 
+    datasourceDf = pd.DataFrame.copy(dataFrames[startDropdownDataOption])
     # Create a ColumnDataSource
-    datasource = ColumnDataSource(pd.DataFrame.copy(dataFrames[startDropdownDataOption]))
+    datasource = ColumnDataSource(datasourceDf)
 
     # Define color mapping
     colorMapping = CategoricalColorMapper(
-        factors=[str(x) for x in np.unique(dataFrames[startDropdownDataOption]['Task'])],
+        factors=[str(x) for x in np.unique(datasourceDf['Task'])],
         palette=Spectral4)
-
-    # Custom Tools
 
     # Create the Bokeh figure
     plot_figure = figure(
         title='UMAP projection of Neurons',
         width=600,
         height=600,
-        tools='pan, wheel_zoom, box_zoom,save, reset, help'
+        tools='pan, wheel_zoom, box_zoom,save, reset, help',
+        toolbar_location="right"
     )
+
+    # Create gid
+
+    # Grid adjustments
+    gridSizeX = 1.0
+    gridSizeY = 1.0
+    gridStartPos = (0.0, 0.0)
+    minPoint = (datasourceDf["x"].min(), datasourceDf["y"].min())
+    maxPoint = (datasourceDf["x"].max(), datasourceDf["y"].max())
+
+    # Generate data points in the middle of each grid cell
+    gridDatasourceDf = util.generateGrid(minPoint, maxPoint, centerPoint=gridStartPos,
+                                         grid_size_x=gridSizeX, grid_size_y=gridSizeY)
+
+    gridDatasourceDf['alpha'] = 0.1
+    gridDatasourceDf['gridSizeX'] = gridSizeX
+    gridDatasourceDf['gridSizeY'] = gridSizeY
+    # gridDatasourceDf = util.assign_points_to_grid(datasourceDf, gridDatasourceDf)
+    gridDatasource = ColumnDataSource(gridDatasourceDf)
+
+    # Create a Bokeh plot
+    gridPlot = plot_figure.rect('centerX', 'centerY', 'gridSizeX', 'gridSizeY',
+                                source=gridDatasource,
+                                fill_color="lightblue",
+                                line_color="black",
+                                line_alpha='alpha',
+                                fill_alpha='alpha')
+
+
+    # Create a scatter plot
+    scatterPlot = plot_figure.scatter(
+        'x',
+        'y',
+        source=datasource,
+        fill_color={'field': 'Task', 'transform': colorMapping},
+        line_color={'field': 'Task', 'transform': colorMapping},
+        line_alpha="alpha",
+        fill_alpha="alpha",
+        size=4,
+        marker='circle'
+    )
+
+    # Custom Tools
 
     hoverVariableString = ""
     for variable in displayHoverVariables:
         hoverVariableString += f"""<span style='font-size: 8px; color: #224499'>{variable}:</span>\n
-            <span style='font-size: 8px'>@{variable}</span>\n"""
+                <span style='font-size: 8px'>@{variable}</span>\n"""
 
-    # Add a HoverTool to display the Matplotlib plot when hovering over a data point
-    plot_figure.add_tools(HoverTool(tooltips=f"""
+    scatterPlotHoverTool = HoverTool(tooltips=f"""
         <div>
             {hoverVariableString}
         </div>
@@ -78,20 +120,26 @@ def plotBokeh(dataFrames, datas, spikePlotImagesPath, dumpFilesPaths, titles, bo
                 border="2"
             />
     </div>
-    """))
+    """, renderers=[scatterPlot])
 
-    # Create a scatter plot
-    plot_figure.scatter(
-        'x',
-        'y',
-        source=datasource,
-        fill_color={'field': 'Task', 'transform': colorMapping},
-        line_color={'field': 'Task', 'transform': colorMapping},
-        line_alpha="alpha",
-        fill_alpha="alpha",
-        size=4,
-        marker='circle'
-    )
+    gridPlotHoverTool = HoverTool(tooltips="""
+    <div>
+        Grid ID: @{gridID}
+        Grid Point Indices: @{pointIndices}
+        Grid Point Neurons: @{pointNeurons}
+    </div>
+    <div>
+        <img src="data:image/png;base64, @{image}" style="float: left; margin: 0px 15px 15px 0px; width: 100px; height: auto;">
+        <span style="font-size: 12px; color: #333;">X: @x</span><br>
+        <span style="font-size: 12px; color: #333;">Y: @y</span>
+    </div>
+           
+    </div>
+    """, renderers=[gridPlot])
+
+    # Add a HoverTool to display the Matplotlib plot when hovering over a data point
+    plot_figure.add_tools(scatterPlotHoverTool)
+    plot_figure.add_tools(gridPlotHoverTool)
 
     # Create an empty line Div for spacing
     blankDiv = Div(text="<br>", width=400, height=5)
@@ -118,6 +166,14 @@ def plotBokeh(dataFrames, datas, spikePlotImagesPath, dumpFilesPaths, titles, bo
 
     generalLayout = column(generalTitleDiv, blankDiv, selectData, selectColor, orFilterMultiChoice,
                            andFilterMultiChoice)
+
+    # Hover Tool and Grid selection
+    enableGridCheckbox = Checkbox(label="Grid Enabled", active=False)
+    gridPlot.visible = enableGridCheckbox.active
+    gridSizeXTextInput = TextInput(value="1.0", title="Grid Size X:", disabled=False)
+    gridSizeYTextInput = TextInput(value="1.0", title="Grid Size Y:", disabled=False)
+    gridSizeButton = Button(label="Update")
+    hoverToolLayout = column(enableGridCheckbox, gridSizeXTextInput, gridSizeYTextInput, gridSizeButton)
 
     # UMAP
     umapTitleDiv = Div(text="<h3>UMAP Parameters: </h3>", width=400, height=20)
@@ -177,12 +233,11 @@ def plotBokeh(dataFrames, datas, spikePlotImagesPath, dumpFilesPaths, titles, bo
     mainLayoutRow = row(generalLayout, column(umapLayout, clusterSelectionLayout), clusterParametersLayout)
     mainLayout = column(mainLayoutTitleDiv, blankDiv,
                         mainLayoutRow,
-                        plot_figure)
+                        row(plot_figure, hoverToolLayout))
 
-    # Callback function to update UMAP when sliders change
     currentCluster = 0
-    datasourceDf = pd.DataFrame.copy(dataFrames[selectData.value])
 
+    # Callback function to update graph when sliders change
     def update_umap(attr, old, new):
         n_neighbors = n_neighbors_slider.value
         min_dist = min_dist_slider.value
@@ -245,7 +300,7 @@ def plotBokeh(dataFrames, datas, spikePlotImagesPath, dumpFilesPaths, titles, bo
         # Update the existing datasource
         datasource.data.update(ColumnDataSource(datasourceDf).data)
         updateCurrentCluster(attr=None, old=None, new=None)
-
+        updateGrid(attr=None, old=None, new=None)
         datasource.data.update(datasource.data)
 
     def updateCurrentCluster(attr, old, new):
@@ -321,6 +376,29 @@ def plotBokeh(dataFrames, datas, spikePlotImagesPath, dumpFilesPaths, titles, bo
         # clicked_label = datasource.data['Neuron'][index]
         # print(f"Point {clicked_label} was clicked!")
 
+    def updateGridButton():
+        updateGrid(attr=None, old=None, new=None)
+    def updateGrid(attr, old, new):
+        global gridSizeY, gridSizeX
+        if enableGridCheckbox.active:
+            gridSizeX = float(gridSizeXTextInput.value)
+            gridSizeY = float(gridSizeYTextInput.value)
+            gridStartPos = (0.0, 0.0)
+            minPoint = (datasourceDf["x"].min(), datasourceDf["y"].min())
+            maxPoint = (datasourceDf["x"].max(), datasourceDf["y"].max())
+
+            # Generate data points in the middle of each grid cell
+            gridDatasourceDf = util.generateGrid(minPoint, maxPoint, centerPoint=gridStartPos,
+                                                 grid_size_x=gridSizeX, grid_size_y=gridSizeY)
+            gridDatasourceDf['gridSizeX'] = gridSizeX
+            gridDatasourceDf['gridSizeY'] = gridSizeY
+            gridDatasourceDf['alpha'] = 0.1
+            gridDatasourceDf = util.assign_points_to_grid(datasourceDf, gridDatasourceDf)
+            gridDatasource.data.update(ColumnDataSource(gridDatasourceDf).data)
+
+        gridPlot.visible=enableGridCheckbox.active
+
+
     # Attach the callback function to slider changes
     n_neighbors_slider.on_change('value_throttled', update_umap)
     min_dist_slider.on_change('value_throttled', update_umap)
@@ -332,8 +410,10 @@ def plotBokeh(dataFrames, datas, spikePlotImagesPath, dumpFilesPaths, titles, bo
     selectData.on_change('value', update_umap)
     selectMetric.on_change('value', update_umap)
     selectColor.on_change('value', update_umap)
-
     selectedClusterTextInput.on_change('value', updateCurrentCluster)
+    gridSizeButton.on_click(updateGridButton)
+    enableGridCheckbox.on_change('active', updateGrid)
+
     # Attach the callback function to the CheckboxGroup's active property
     clusterSelectionMethodToggle.on_change("active", update_umap)
     allowSingleLinkageToggle.on_change("active", update_umap)
