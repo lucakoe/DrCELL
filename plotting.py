@@ -12,7 +12,7 @@ from umap import plot, UMAP
 from bokeh.plotting import figure, show, output_notebook
 from bokeh.models import HoverTool, ColumnDataSource, CategoricalColorMapper, CustomJS, Slider, Select, Checkbox, \
     MultiChoice, ColorBar, TextInput, CustomAction, TapTool, CheckboxGroup, RadioGroup, Div, Button
-from bokeh.palettes import Spectral4, Spectral11
+from bokeh.palettes import Spectral4, Spectral11, Turbo256, Spectral10
 import io
 import os
 
@@ -34,8 +34,8 @@ def generateDiagnosticPlots(umapObject, data):
 def plotBokeh(dataFrames, datas, spikePlotImagesPath, dumpFilesPaths, titles, bokehShow=True,
               startDropdownDataOption="all", debug=False, experimental=False):
     imagesPath = spikePlotImagesPath
-    dataVariables = ["IsChoiceSelect", "IsStimSelect", "RedNeurons", "Task"]
-    displayHoverVariables = ["Neuron", "ChoiceAUCs", "StimAUCs", "Cluster"]
+    dataVariables = ["Task", "IsChoiceSelect", "IsStimSelect", "ChoiceAUCs", "StimAUCs", "RedNeurons"]
+    displayHoverVariables = ["Neuron", "ChoiceAUCs", "StimAUCs", "Cluster", 'ColorMappingCategory']
 
     for title in titles:
         dataFrames[title] = dataFrames[title].sample(frac=1, random_state=42)
@@ -43,13 +43,9 @@ def plotBokeh(dataFrames, datas, spikePlotImagesPath, dumpFilesPaths, titles, bo
         dataFrames[title]['alpha'] = 1.0
 
     datasourceDf = pd.DataFrame.copy(dataFrames[startDropdownDataOption])
+    datasourceDf['alpha'] = 1.0
     # Create a ColumnDataSource
     datasource = ColumnDataSource(datasourceDf)
-
-    # Define color mapping
-    colorMapping = CategoricalColorMapper(
-        factors=[str(x) for x in np.unique(datasourceDf['Task'])],
-        palette=Spectral4)
 
     # Create the Bokeh figure
     plot_figure = figure(
@@ -87,14 +83,13 @@ def plotBokeh(dataFrames, datas, spikePlotImagesPath, dumpFilesPaths, titles, bo
                                 line_alpha='alpha',
                                 fill_alpha='alpha')
 
-
     # Create a scatter plot
     scatterPlot = plot_figure.scatter(
         'x',
         'y',
         source=datasource,
-        fill_color={'field': 'Task', 'transform': colorMapping},
-        line_color={'field': 'Task', 'transform': colorMapping},
+        fill_color="blue",
+        line_color="blue",
         line_alpha="alpha",
         fill_alpha="alpha",
         size=4,
@@ -151,12 +146,13 @@ def plotBokeh(dataFrames, datas, spikePlotImagesPath, dumpFilesPaths, titles, bo
     selectData = Select(title="Data:", value=startDropdownDataOption, options=optionsSelectData)
 
     optionsFilterMultiChoiceValues = {}
+    optionsSelectColor = ["All", "Cluster"]
+
     for option in dataVariables:
+        optionsSelectColor.append(option)
         for value in np.unique(dataFrames[startDropdownDataOption][option]):
             optionsFilterMultiChoiceValues[f"{option} == {value}"] = (option, value)
-    optionsSelectColorValues = {"Tasks": ("Task", 1)}
-    optionsSelectColorValues.update(optionsFilterMultiChoiceValues.copy())
-    optionsSelectColor = list(optionsSelectColorValues.keys())
+
     selectColor = Select(title="Color:", value=optionsSelectColor[0], options=optionsSelectColor)
 
     optionsFilterMultiChoice = list(optionsFilterMultiChoiceValues.keys())
@@ -221,11 +217,6 @@ def plotBokeh(dataFrames, datas, spikePlotImagesPath, dumpFilesPaths, titles, bo
     clusterSelectionLayout = column(clusterSelectionTitleDiv, blankDiv, highlightClusterCheckbox,
                                     selectedClusterTextInput,
                                     select_cluster_slider)
-
-    # Create a color bar for the color mapper
-    color_bar = ColorBar(title="Task", color_mapper=colorMapping, location=(0, 0))
-    # Add the color bar to the figure
-    plot_figure.add_layout(color_bar, 'below')
 
     mainLayoutTitleDiv = Div(text="<h2>Cluster Exploration and Labeling Library: </h2>", width=800, height=20)
 
@@ -352,14 +343,6 @@ def plotBokeh(dataFrames, datas, spikePlotImagesPath, dumpFilesPaths, titles, bo
             f"Clusters: {clusterNumber}, Clustered: {percentage}%, Clustered/Unclustered Ratio: {ratio}, Clustered: {clustered_count}, Unclustered: {unclustered_count}"
         )
 
-        # Change Color
-        nonlocal colorMapping
-
-        # colorMapping = CategoricalColorMapper(factors=[str(x) for x in np.unique(datasourceDf[optionsSelectColorValues[selectColor.value][0]])],palette=Spectral4)
-        # datasource.data['fill_color']={'field': optionsSelectColorValues[selectColor.value][0], 'transform': colorMapping}
-        # datasource.data['line_color']={'field': optionsSelectColorValues[selectColor.value][0], 'transform': colorMapping}
-        # color_bar.color_mapper=colorMapping
-
         print("\n")
 
         datasource.data.update(datasource.data)
@@ -375,8 +358,58 @@ def plotBokeh(dataFrames, datas, spikePlotImagesPath, dumpFilesPaths, titles, bo
         # clicked_label = datasource.data['Neuron'][index]
         # print(f"Point {clicked_label} was clicked!")
 
+    colorBar_initilized = False
+    color_bar = ColorBar()
+
+    def update_category(attr, old, new):
+        nonlocal scatterPlot, color_bar, colorBar_initilized
+        if selectColor.value == "All":
+            scatterPlot.glyph.fill_color = "blue"
+            scatterPlot.glyph.line_color = "blue"
+        else:
+            uniqueFactors = np.unique(datasourceDf[selectColor.value])
+            try:
+                uniqueFactors = sorted(uniqueFactors)
+                print(f"Color adjusted to and sorted by {selectColor.value}")
+
+            except TypeError:
+                print(f"Color adjusted unsorted by {selectColor.value}")
+            newFactors = [str(x) for x in np.unique(datasourceDf[selectColor.value])]
+            colorPalette = Turbo256
+            if (len(newFactors) <= 4):
+                colorPalette = Spectral4
+            elif (len(newFactors) <= 10):
+                colorPalette = Spectral10
+
+            datasourceDf['ColorMappingCategory'] = datasourceDf[selectColor.value].astype(str)
+            datasource.data.update(ColumnDataSource(datasourceDf).data)
+
+            customColorPalette = [colorPalette[i % len(colorPalette)] for i in range(len(uniqueFactors))]
+
+            colorMapping = CategoricalColorMapper(
+                factors=newFactors,
+                palette=customColorPalette)
+
+            scatterPlot.glyph.fill_color = {'field': 'ColorMappingCategory', 'transform': colorMapping}
+            scatterPlot.glyph.line_color = {'field': 'ColorMappingCategory', 'transform': colorMapping}
+
+            if not colorBar_initilized:
+                # Create a color bar for the color mapper
+                color_bar = ColorBar(title="Task", color_mapper=colorMapping, location=(0, 0))
+                # Add the color bar to the figure
+                plot_figure.add_layout(color_bar, 'below')
+                colorBar_initilized = True
+            else:
+                color_bar.color_mapper = colorMapping
+
+        # colorMappingFactors=[str(x) for x in datasourceDf["ColorMappingCategory"].unique()]
+        # colorMapping.factors=colorMappingFactors
+        # colorMapping.palette=[colorPalette[i % len(colorPalette)] for i in range(len(datasourceDf['ColorMappingCategory'].unique()))]
+        # color_bar.glyph.color = {'field': 'ColorMappingCategory', 'transform': colorMapping}
+
     def updateGridButton():
         updateGrid(attr=None, old=None, new=None)
+
     def updateGrid(attr, old, new):
         global gridSizeY, gridSizeX
         if enableGridCheckbox.active:
@@ -392,11 +425,12 @@ def plotBokeh(dataFrames, datas, spikePlotImagesPath, dumpFilesPaths, titles, bo
             gridDatasourceDf['gridSizeX'] = gridSizeX
             gridDatasourceDf['gridSizeY'] = gridSizeY
             gridDatasourceDf['alpha'] = 0.1
-            gridDatasourceDf = util.assign_points_to_grid(datasourceDf, gridDatasourceDf, [('index','pointIndices'), ("Neuron","pointNeurons")])
+            gridDatasourceDf = util.assign_points_to_grid(datasourceDf, gridDatasourceDf,
+                                                          [('index', 'pointIndices'), ("Neuron", "pointNeurons")])
 
             gridDatasource.data.update(ColumnDataSource(gridDatasourceDf).data)
 
-        gridPlot.visible=enableGridCheckbox.active
+        gridPlot.visible = enableGridCheckbox.active
 
     def hover_callback(attr, old_index, new_index):
         if new_index:
@@ -416,7 +450,7 @@ def plotBokeh(dataFrames, datas, spikePlotImagesPath, dumpFilesPaths, titles, bo
     # Attach the callback function to the dropdown menu
     selectData.on_change('value', update_umap)
     selectMetric.on_change('value', update_umap)
-    selectColor.on_change('value', update_umap)
+    selectColor.on_change('value', update_category)
     selectedClusterTextInput.on_change('value', updateCurrentCluster)
     gridSizeButton.on_click(updateGridButton)
     enableGridCheckbox.on_change('active', updateGrid)
@@ -433,7 +467,6 @@ def plotBokeh(dataFrames, datas, spikePlotImagesPath, dumpFilesPaths, titles, bo
 
     gridDatasource.selected.on_change('indices', hover_callback)
 
-
     plot_figure.on_event(Tap, on_point_click)
 
     # Create a layout for the sliders and plot
@@ -448,9 +481,7 @@ def plotBokeh(dataFrames, datas, spikePlotImagesPath, dumpFilesPaths, titles, bo
 
 
 def plotAndReturnSpikes(fluorescence_array, fps=30, number_consecutive_recordings=6):
-    # interactive view
-
-    # Calculate time values based on the frame rate (30 fps)
+    # Calculate time values based on the frame rate per second
     n = len(fluorescence_array)
     time_values = np.arange(n) / fps
 
