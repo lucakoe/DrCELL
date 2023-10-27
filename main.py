@@ -11,7 +11,7 @@ import hdbscan
 
 projectPath = r"C:\Users\koenig\Documents\GitHub\twoP\Playground\Luca\PlaygoundProject"
 # change working directory, because Bokeh Server doesnt recognize it otherwise
-os.chdir(os.path.join(projectPath, "misc"))
+os.chdir(os.path.join(projectPath))
 # add to project Path so Bokeh Server can import other python files correctly
 sys.path.append(projectPath)
 
@@ -34,12 +34,12 @@ generateUMAPParameters = False
 debugging = False
 experimental = False
 spikePlotImagesPath = r'C:/Users/koenig/Documents/GitHub/twoP/Playground/Luca/PlaygoundProject/data/temp/plot_images'
-dumpFilesPath = r"../data/temp/"
+dumpFilesPath = r"./data/temp/"
 # spikePlotImagesPath=os.path.join(spikePlotImagesPath, title)
 umapOutParamDumpFilenameExtention = "_umapOutParamDump_MedianChoiceStim30trials.pkl"
 bokehShow = False
-allFiles = [r'../data/Umap_2530_2532MedianChoiceStim30trials_Array.mat']
-outputPath = r'../data'
+allFiles = [r'./data/Umap_2530_2532MedianChoiceStim30trials_Array.mat']
+outputPath = r'./data'
 # ['C:\\Users\\despatin\\Downloads\\UMAPmatrixInnate2530.mat', 'C:\\Users\\despatin\\Downloads\\UMAPmatrixTaskWithoutDelay2530.mat', 'C:\\Users\\despatin\\Downloads\\UMAPmatrixTaskWithDelay2530.mat', 'C:\\Users\\despatin\\Downloads\\UMAPmatrixInnate22530.mat', 'C:\\Users\\despatin\\Downloads\\UMAPmatrixInnate2532.mat', 'C:\\Users\\despatin\\Downloads\\UMAPmatrixAudioTaskWithoutDelay2532.mat', 'C:\\Users\\despatin\\Downloads\\UMAPmatrixAudioTaskWithDelay2532.mat', 'C:\\Users\\despatin\\Downloads\\UMAPmatrixInnate22532.mat']
 # 
 # allFiles = ['Q:\\BpodImager\\umapClust\\20210309T2356_fullA.mat'] #first file
