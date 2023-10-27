@@ -41,6 +41,7 @@ def plotBokeh(dataFrames, datas, spikePlotImagesPath, dumpFilesPaths, titles, bo
         dataFrames[title] = dataFrames[title].sample(frac=1, random_state=42)
         if debug: print(f"Dataframe {title}: \n{dataFrames[title]}")
         dataFrames[title]['alpha'] = 1.0
+        dataFrames[title]['ColorMappingCategory'] = 1.0
 
     datasourceDf = pd.DataFrame.copy(dataFrames[startDropdownDataOption])
     datasourceDf['alpha'] = 1.0
@@ -292,6 +293,7 @@ def plotBokeh(dataFrames, datas, spikePlotImagesPath, dumpFilesPaths, titles, bo
         updateCurrentCluster(attr=None, old=None, new=None)
         updateGrid(attr=None, old=None, new=None)
         datasource.data.update(datasource.data)
+        update_category(attr=None, old=None, new=None)
 
     def updateCurrentCluster(attr, old, new):
         nonlocal currentCluster

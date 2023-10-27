@@ -36,9 +36,9 @@ experimental = False
 spikePlotImagesPath = r'C:/Users/koenig/Documents/GitHub/twoP/Playground/Luca/PlaygoundProject/data/temp/plot_images'
 dumpFilesPath = r"../data/temp/"
 # spikePlotImagesPath=os.path.join(spikePlotImagesPath, title)
-umapOutParamDumpFilenameExtention = "_umapOutParamDump.pkl"
+umapOutParamDumpFilenameExtention = "_umapOutParamDump_MedianChoiceStim30trials.pkl"
 bokehShow = False
-allFiles = [r'../data/Umap_2530_2532_Array.mat']
+allFiles = [r'../data/Umap_2530_2532MedianChoiceStim30trials_Array.mat']
 outputPath = r'../data'
 # ['C:\\Users\\despatin\\Downloads\\UMAPmatrixInnate2530.mat', 'C:\\Users\\despatin\\Downloads\\UMAPmatrixTaskWithoutDelay2530.mat', 'C:\\Users\\despatin\\Downloads\\UMAPmatrixTaskWithDelay2530.mat', 'C:\\Users\\despatin\\Downloads\\UMAPmatrixInnate22530.mat', 'C:\\Users\\despatin\\Downloads\\UMAPmatrixInnate2532.mat', 'C:\\Users\\despatin\\Downloads\\UMAPmatrixAudioTaskWithoutDelay2532.mat', 'C:\\Users\\despatin\\Downloads\\UMAPmatrixAudioTaskWithDelay2532.mat', 'C:\\Users\\despatin\\Downloads\\UMAPmatrixInnate22532.mat']
 # 
