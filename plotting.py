@@ -1,8 +1,12 @@
+import random
+
 import hdbscan
+import datetime
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas
 import pandas as pd
+import scipy
 import umap.plot
 from bokeh.events import Tap
 from bokeh.io import curdoc
@@ -12,11 +16,13 @@ from umap import plot, UMAP
 from bokeh.plotting import figure, show, output_notebook
 from bokeh.models import HoverTool, ColumnDataSource, CategoricalColorMapper, CustomJS, Slider, Select, Checkbox, \
     MultiChoice, ColorBar, TextInput, CustomAction, TapTool, CheckboxGroup, RadioGroup, Div, Button
-from bokeh.palettes import Spectral4, Spectral11, Turbo256, Spectral10
+from bokeh.palettes import Spectral4, Spectral11, Turbo256, Spectral10, Paired12, Muted9
 import io
 import os
 
 import util
+
+colorPalette = Muted9
 
 
 def generateDiagnosticPlots(umapObject, data):
@@ -32,19 +38,21 @@ def generateDiagnosticPlots(umapObject, data):
 
 
 def plotBokeh(dataFrames, datas, spikePlotImagesPath, dumpFilesPaths, titles, bokehShow=True,
-              startDropdownDataOption="all", debug=False, experimental=False):
+              startDropdownDataOption="all", outputFilePath="./data/output/", debug=False, experimental=False):
     imagesPath = spikePlotImagesPath
-    dataVariables = ["Task", "IsChoiceSelect", "IsStimSelect", "ChoiceAUCs", "StimAUCs", "RedNeurons"]
-    displayHoverVariables = ["Neuron", "ChoiceAUCs", "StimAUCs", "Cluster", 'ColorMappingCategory']
+    dataVariables = ["Task", "IsChoiceSelect", "IsStimSelect", "RedNeurons"]
+    displayHoverVariables = ["OwnIndex", "Neuron", "ChoiceAUCs", "StimAUCs", "Cluster", 'ColorMappingCategory']
 
     for title in titles:
         dataFrames[title] = dataFrames[title].sample(frac=1, random_state=42)
         if debug: print(f"Dataframe {title}: \n{dataFrames[title]}")
+        dataFrames[title]['OwnIndex'] = dataFrames[title].index
         dataFrames[title]['alpha'] = 1.0
         dataFrames[title]['ColorMappingCategory'] = 1.0
+        dataFrames[title]['Cluster'] = -1
 
     datasourceDf = pd.DataFrame.copy(dataFrames[startDropdownDataOption])
-    datasourceDf['alpha'] = 1.0
+    updateClusterToggleDf = pd.DataFrame.copy(datasourceDf)
     # Create a ColumnDataSource
     datasource = ColumnDataSource(datasourceDf)
 
@@ -117,7 +125,7 @@ def plotBokeh(dataFrames, datas, spikePlotImagesPath, dumpFilesPaths, titles, bo
             />
     </div>
     """, renderers=[scatterPlot])
-
+    # TODO finish grid hover tool
     gridPlotHoverTool = HoverTool(tooltips="""
     <div>
         Grid ID: @{gridID}
@@ -159,9 +167,10 @@ def plotBokeh(dataFrames, datas, spikePlotImagesPath, dumpFilesPaths, titles, bo
     optionsFilterMultiChoice = list(optionsFilterMultiChoiceValues.keys())
     orFilterMultiChoice = MultiChoice(title="'OR' Filter:", value=[], options=optionsFilterMultiChoice, width=200)
     andFilterMultiChoice = MultiChoice(title="'AND' Filter:", value=[], options=optionsFilterMultiChoice, width=200)
+    exportDataButton = Button(label="Export Data")
 
     generalLayout = column(generalTitleDiv, blankDiv, selectData, selectColor, orFilterMultiChoice,
-                           andFilterMultiChoice)
+                           andFilterMultiChoice, exportDataButton)
 
     # Hover Tool and Grid selection
     enableGridCheckbox = Checkbox(label="Grid Enabled", active=False)
@@ -169,6 +178,7 @@ def plotBokeh(dataFrames, datas, spikePlotImagesPath, dumpFilesPaths, titles, bo
     gridSizeXTextInput = TextInput(value="1.0", title="Grid Size X:", disabled=False)
     gridSizeYTextInput = TextInput(value="1.0", title="Grid Size Y:", disabled=False)
     gridSizeButton = Button(label="Update")
+
     hoverToolLayout = column(enableGridCheckbox, gridSizeXTextInput, gridSizeYTextInput, gridSizeButton)
 
     # UMAP
@@ -186,7 +196,7 @@ def plotBokeh(dataFrames, datas, spikePlotImagesPath, dumpFilesPaths, titles, bo
     # Cluster Parameters
 
     clusterParametersTitleDiv = Div(text="<h3>Cluster Parameters: </h3>", width=400, height=20)
-
+    updateClustersToggle = Checkbox(label="Update Clusters (experimental)", active=True)
     min_cluster_size_slider = Slider(title="min_cluster_size", start=1, end=50, step=1, value=5, disabled=False)
     min_samples_slider = Slider(title="min_sample", start=1, end=10, step=1, value=1, disabled=False)
     optionsClusterSelectionMethod = ['eom', 'leaf']
@@ -201,13 +211,14 @@ def plotBokeh(dataFrames, datas, spikePlotImagesPath, dumpFilesPaths, titles, bo
     allowSingleLinkageToggle = Checkbox(label="Allow Single-Linkage", active=False)
     approximateMinimumSpanningTreeToggle = Checkbox(label="Approximate Minimum Spanning Tree", active=True)
 
-    clusterParametersLayout = column(clusterParametersTitleDiv, blankDiv, min_cluster_size_slider, min_samples_slider,
+    clusterParametersLayout = column(clusterParametersTitleDiv, blankDiv, updateClustersToggle, min_cluster_size_slider,
+                                     min_samples_slider,
                                      cluster_selection_epsilon_slider,
                                      allowSingleLinkageToggle, approximateMinimumSpanningTreeToggle, selectMetric,
                                      clusterSelectionMethodToggle)
 
     # Cluster Selection
-
+    # TODO fix Cluster Selection bug
     clusterSelectionTitleDiv = Div(text="<h3>Cluster Selection: </h3>", width=400, height=20)
 
     highlightClusterCheckbox = Checkbox(label="Highlight Cluster", active=False)
@@ -232,10 +243,19 @@ def plotBokeh(dataFrames, datas, spikePlotImagesPath, dumpFilesPaths, titles, bo
     def update_umap(attr, old, new):
         n_neighbors = n_neighbors_slider.value
         min_dist = min_dist_slider.value
-        nonlocal datasourceDf
-        nonlocal currentCluster
+        nonlocal datasourceDf, updateClusterToggleDf, currentCluster
         # Resets to initial state
         datasourceDf = pd.DataFrame.copy(dataFrames[selectData.value])
+        # TODO fix Update Cluster
+        print(datasourceDf)
+        print(updateClusterToggleDf)
+        print(updateClusterToggleDf[updateClusterToggleDf["Task"] == "1"])
+        # Set the 'ID' column as the index in both DataFrames
+        # datasourceDf.set_index('OwnIndex', inplace=True)
+        # updateClusterToggleDf.set_index('OwnIndex', inplace=True)
+        datasourceDf.update(updateClusterToggleDf["Cluster"])
+        print(datasourceDf[datasourceDf["Task"] == "1"])
+        # datasourceDf.reset_index(inplace=True)
 
         umap_result = util.getUMAPOut(datas[selectData.value],
                                       os.path.abspath(dumpFilesPaths[selectData.value]).replace("\\", '/'),
@@ -246,7 +266,7 @@ def plotBokeh(dataFrames, datas, spikePlotImagesPath, dumpFilesPaths, titles, bo
             datasourceDf = pd.DataFrame(columns=datasourceDf.columns)
             for option in orFilterMultiChoice.value:
                 initialDf = pd.DataFrame.copy(dataFrames[selectData.value])
-                # makes a dataframe with just the filtered entrys and merges it with the other slected values
+                # makes a dataframe with just the filtered entries and merges it with the other selected values
                 filterDf = initialDf[
                     initialDf[optionsFilterMultiChoiceValues[option][0]] == optionsFilterMultiChoiceValues[option][
                         1]]
@@ -268,22 +288,22 @@ def plotBokeh(dataFrames, datas, spikePlotImagesPath, dumpFilesPaths, titles, bo
 
         if debug: print(datasourceDf)
         umap_result = datasourceDf[['x', 'y']].values
+        if updateClustersToggle.active:
+            clusters = []
+            if len(umap_result) > 0:
+                # Apply HDBSCAN clustering
+                clusterer = hdbscan.HDBSCAN(min_cluster_size=min_cluster_size_slider.value,
+                                            min_samples=min_samples_slider.value,
+                                            allow_single_cluster=allowSingleLinkageToggle.active,
+                                            approx_min_span_tree=approximateMinimumSpanningTreeToggle.active,
+                                            cluster_selection_method=optionsClusterSelectionMethod[
+                                                clusterSelectionMethodToggle.active],
+                                            metric=selectMetric.value,
+                                            cluster_selection_epsilon=cluster_selection_epsilon_slider.value)
+                clusters = clusterer.fit_predict(umap_result)
 
-        clusters = []
-        if len(umap_result) > 0:
-            # Apply HDBSCAN clustering
-            clusterer = hdbscan.HDBSCAN(min_cluster_size=min_cluster_size_slider.value,
-                                        min_samples=min_samples_slider.value,
-                                        allow_single_cluster=allowSingleLinkageToggle.active,
-                                        approx_min_span_tree=approximateMinimumSpanningTreeToggle.active,
-                                        cluster_selection_method=optionsClusterSelectionMethod[
-                                            clusterSelectionMethodToggle.active],
-                                        metric=selectMetric.value,
-                                        cluster_selection_epsilon=cluster_selection_epsilon_slider.value)
-            clusters = clusterer.fit_predict(umap_result)
-
-        # Add cluster labels to your dataframe
-        datasourceDf['Cluster'] = clusters
+            # Add cluster labels to your dataframe
+            datasourceDf['Cluster'] = clusters
         if debug: print(datasourceDf)
 
         select_cluster_slider.end = len(np.unique(datasourceDf['Cluster']))
@@ -365,29 +385,28 @@ def plotBokeh(dataFrames, datas, spikePlotImagesPath, dumpFilesPaths, titles, bo
 
     def update_category(attr, old, new):
         nonlocal scatterPlot, color_bar, colorBar_initilized
+        global colorPalette
         if selectColor.value == "All":
             scatterPlot.glyph.fill_color = "blue"
             scatterPlot.glyph.line_color = "blue"
         else:
             uniqueFactors = np.unique(datasourceDf[selectColor.value])
+            if selectColor.value == "Cluster":
+                uniqueFactors = uniqueFactors[uniqueFactors != -1]
             try:
                 uniqueFactors = sorted(uniqueFactors)
                 print(f"Color adjusted to and sorted by {selectColor.value}")
 
             except TypeError:
                 print(f"Color adjusted unsorted by {selectColor.value}")
-            newFactors = [str(x) for x in np.unique(datasourceDf[selectColor.value])]
-            colorPalette = Turbo256
-            if (len(newFactors) <= 4):
-                colorPalette = Spectral4
-            elif (len(newFactors) <= 10):
-                colorPalette = Spectral10
+            newFactors = [str(x) for x in uniqueFactors]
 
             datasourceDf['ColorMappingCategory'] = datasourceDf[selectColor.value].astype(str)
             datasource.data.update(ColumnDataSource(datasourceDf).data)
 
-            customColorPalette = [colorPalette[i % len(colorPalette)] for i in range(len(uniqueFactors))]
-
+            customColorPalette = list([colorPalette[int(int(i * (len(colorPalette) - 1) / len(uniqueFactors)))] for i in
+                                       range(len(uniqueFactors))])
+            random.shuffle(customColorPalette)
             colorMapping = CategoricalColorMapper(
                 factors=newFactors,
                 palette=customColorPalette)
@@ -397,12 +416,18 @@ def plotBokeh(dataFrames, datas, spikePlotImagesPath, dumpFilesPaths, titles, bo
 
             if not colorBar_initilized:
                 # Create a color bar for the color mapper
-                color_bar = ColorBar(title="Task", color_mapper=colorMapping, location=(0, 0))
+                color_bar = ColorBar(title=selectColor.value, color_mapper=colorMapping, location=(0, 0))
                 # Add the color bar to the figure
                 plot_figure.add_layout(color_bar, 'below')
                 colorBar_initilized = True
             else:
                 color_bar.color_mapper = colorMapping
+
+            if selectColor.value == "All":
+                color_bar.visible = False
+            else:
+                color_bar.visible = True
+                color_bar.title = selectColor.value
 
         # colorMappingFactors=[str(x) for x in datasourceDf["ColorMappingCategory"].unique()]
         # colorMapping.factors=colorMappingFactors
@@ -411,6 +436,12 @@ def plotBokeh(dataFrames, datas, spikePlotImagesPath, dumpFilesPaths, titles, bo
 
     def updateGridButton():
         updateGrid(attr=None, old=None, new=None)
+
+    def updateClusterToggleFunction(attr, old, new):
+        nonlocal updateClusterToggleDf, datasourceDf
+        if updateClustersToggle.active:
+            updateClusterToggleDf = pd.DataFrame.copy(datasourceDf)
+        update_umap(attr=None, old=None, new=None)
 
     def updateGrid(attr, old, new):
         global gridSizeY, gridSizeX
@@ -434,6 +465,17 @@ def plotBokeh(dataFrames, datas, spikePlotImagesPath, dumpFilesPaths, titles, bo
 
         gridPlot.visible = enableGridCheckbox.active
 
+    def exportData():
+        # Convert the DataFrame to a dictionary
+        data_dict = {'df': datasourceDf.to_dict("list")}
+        filename = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + f"_umap_cluster_output"
+
+        # Save the dictionary to a MATLAB .mat file
+        scipy.io.savemat(os.path.join(outputFilePath, filename + ".mat"), data_dict)
+        np.save(os.path.join(outputFilePath, filename + ".npy"), datasourceDf.to_numpy())
+        print(f"Data has been saved to {filename}_umap_cluster_output.mat")
+        print(f"Data has been saved to {filename}_umap_cluster_output.npy")
+
     def hover_callback(attr, old_index, new_index):
         if new_index:
             selected_data = gridDatasource.data
@@ -455,12 +497,14 @@ def plotBokeh(dataFrames, datas, spikePlotImagesPath, dumpFilesPaths, titles, bo
     selectColor.on_change('value', update_category)
     selectedClusterTextInput.on_change('value', updateCurrentCluster)
     gridSizeButton.on_click(updateGridButton)
+    exportDataButton.on_click(exportData)
     enableGridCheckbox.on_change('active', updateGrid)
 
     # Attach the callback function to the CheckboxGroup's active property
     clusterSelectionMethodToggle.on_change("active", update_umap)
     allowSingleLinkageToggle.on_change("active", update_umap)
     approximateMinimumSpanningTreeToggle.on_change("active", update_umap)
+    updateClustersToggle.on_change("active", updateClusterToggleFunction)
     # Attach the callback function to the MultiChoice's "value" property
     andFilterMultiChoice.on_change('value', update_umap)
     orFilterMultiChoice.on_change('value', update_umap)
@@ -473,6 +517,7 @@ def plotBokeh(dataFrames, datas, spikePlotImagesPath, dumpFilesPaths, titles, bo
 
     # Create a layout for the sliders and plot
     layout = column(mainLayout)
+    update_umap(attr=None, old=None, new=None)
 
     if bokehShow:
         # Show the plot
@@ -506,9 +551,10 @@ def plotAndReturnSpikes(fluorescence_array, fps=30, number_consecutive_recording
     return plt
 
 
-def plotAndSaveSpikes(neuronNumber, dataframe, outputFolder):
+def plotAndSaveSpikes(neuronNumber, dataframe, outputFolder, fps=30, number_consecutive_recordings=6):
     # takes selected row (fluorescence data of one cell), makes it to an array and plots it
-    plt = plotAndReturnSpikes(dataframe.iloc[neuronNumber].values)
+    plt = plotAndReturnSpikes(dataframe.iloc[neuronNumber].values, fps=fps,
+                              number_consecutive_recordings=number_consecutive_recordings)
     buf = io.BytesIO()
     plt.savefig(buf, format='png', dpi=80)
     buf.seek(0)

@@ -33,7 +33,7 @@ generateDiagnosticPlots = False
 generateUMAPParameters = False
 debugging = False
 experimental = False
-spikePlotImagesPath = r'C:/Users/koenig/Documents/GitHub/twoP/Playground/Luca/PlaygoundProject/data/temp/plot_images'
+spikePlotImagesPath = r'C:\Users\koenig\OneDrive - Students RWTH Aachen University\Bachelorarbeit\GitHub\twoP\Playground\Luca\PlaygoundProject\data\temp/plot_images'
 dumpFilesPath = r"./data/temp/"
 # spikePlotImagesPath=os.path.join(spikePlotImagesPath, title)
 umapOutParamDumpFilenameExtention = "_umapOutParamDump_MedianChoiceStim30trials.pkl"
@@ -81,9 +81,9 @@ for cFile in allFiles:
 
         # Convert the Matplotlib plots to base64-encoded PNGs
 
-        if (generateAndSaveSpikePlots) and title=="all":
+        if (generateAndSaveSpikePlots) and title == "all":
             for i in range(umapDf.shape[0]):
-                plotting.plotAndSaveSpikes(i, umapDf, spikePlotImagesPath)
+                plotting.plotAndSaveSpikes(i, umapDf, spikePlotImagesPath, fps=30, number_consecutive_recordings=2)
 
         tempUmapOut = pandas.DataFrame
         umapObject = umap.UMAP
@@ -136,7 +136,7 @@ for cFile in allFiles:
 
     # plots UMAP via Bokeh
     plotting.plotBokeh(cellDfs, cleanedDatas, spikePlotImagesPath, dumpFilesPaths, titles, bokehShow=bokehShow,
-                       startDropdownDataOption=titles[0],debug=debugging, experimental=experimental)
+                       startDropdownDataOption=titles[0], debug=debugging, experimental=experimental)
 
     # # show results
     # cIdx = np.random.permutation(matrixLegendDf["Task"].size)
