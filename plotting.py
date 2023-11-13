@@ -1,32 +1,26 @@
 import random
-
 import hdbscan
 import datetime
 import numpy as np
 import matplotlib.pyplot as plt
-import pandas
 import pandas as pd
 import scipy
 import umap.plot
 from bokeh.events import Tap
 from bokeh.io import curdoc
 from bokeh.layouts import column, row
-from colorcet import fire
-from umap import plot, UMAP
 from bokeh.plotting import figure, show, output_notebook
 from bokeh.models import HoverTool, ColumnDataSource, CategoricalColorMapper, CustomJS, Slider, Select, Checkbox, \
     MultiChoice, ColorBar, TextInput, CustomAction, TapTool, CheckboxGroup, RadioGroup, Div, Button
-from bokeh.palettes import Spectral4, Spectral11, Turbo256, Spectral10, Paired12, Muted9
+from bokeh.palettes import Muted9
 import io
 import os
 
 import util
 
-colorPalette = Muted9
 
-
-def generateDiagnosticPlots(umapObject, data):
-    mapper = umapObject.fit(data)
+def generate_diagnostic_plots(umap_object, data):
+    mapper = umap_object.fit(data)
     umap.plot.diagnostic(mapper, diagnostic_type='pca')
     plt.show()
     umap.plot.diagnostic(mapper, diagnostic_type='vq')
@@ -37,24 +31,32 @@ def generateDiagnosticPlots(umapObject, data):
     plt.show()
 
 
-def plotBokeh(dataFrames, datas, spikePlotImagesPath, dumpFilesPaths, titles, bokehShow=True,
-              startDropdownDataOption="all", outputFilePath="./data/output/", debug=False, experimental=False):
-    imagesPath = spikePlotImagesPath
-    dataVariables = ["Task", "IsChoiceSelect", "IsStimSelect", "RedNeurons"]
-    displayHoverVariables = ["OwnIndex", "Neuron", "ChoiceAUCs", "StimAUCs", "Cluster", 'ColorMappingCategory']
+def plot_bokeh(data_frames, datas, spike_plot_images_path, dump_files_paths, titles=None, bokeh_show=True,
+               start_dropdown_data_option="all", output_file_path="./data/output/", data_variables=None,
+               display_hover_variables=None, debug=False, experimental=False,
+               color_palette=Muted9):
+    if display_hover_variables is None:
+        display_hover_variables = []
+    display_hover_variables.insert(0,"Cluster")
+    if data_variables is None:
+        data_variables = []
+    if titles is None:
+        titles = ["all"]
+    print("Loading Bokeh Plotting Interface")
+    images_path = spike_plot_images_path
 
     for title in titles:
-        dataFrames[title] = dataFrames[title].sample(frac=1, random_state=42)
-        if debug: print(f"Dataframe {title}: \n{dataFrames[title]}")
-        dataFrames[title]['OwnIndex'] = dataFrames[title].index
-        dataFrames[title]['alpha'] = 1.0
-        dataFrames[title]['ColorMappingCategory'] = 1.0
-        dataFrames[title]['Cluster'] = -1
+        data_frames[title] = data_frames[title].sample(frac=1, random_state=42)
+        if debug: print(f"Dataframe {title}: \n{data_frames[title]}")
+        data_frames[title]['OwnIndex'] = data_frames[title].index
+        data_frames[title]['alpha'] = 1.0
+        data_frames[title]['ColorMappingCategory'] = 1.0
+        data_frames[title]['Cluster'] = -1
 
-    datasourceDf = pd.DataFrame.copy(dataFrames[startDropdownDataOption])
-    updateClusterToggleDf = pd.DataFrame.copy(datasourceDf)
+    datasource_df = pd.DataFrame.copy(data_frames[start_dropdown_data_option])
+    update_cluster_toggle_df = pd.DataFrame.copy(datasource_df)
     # Create a ColumnDataSource
-    datasource = ColumnDataSource(datasourceDf)
+    datasource = ColumnDataSource(datasource_df)
 
     # Create the Bokeh figure
     plot_figure = figure(
@@ -70,30 +72,30 @@ def plotBokeh(dataFrames, datas, spikePlotImagesPath, dumpFilesPaths, titles, bo
     # Grid adjustments
     gridSizeX = 1.0
     gridSizeY = 1.0
-    gridStartPos = (0.0, 0.0)
-    minPoint = (datasourceDf["x"].min(), datasourceDf["y"].min())
-    maxPoint = (datasourceDf["x"].max(), datasourceDf["y"].max())
+    grid_start_pos = (0.0, 0.0)
+    min_point = (datasource_df["x"].min(), datasource_df["y"].min())
+    max_point = (datasource_df["x"].max(), datasource_df["y"].max())
 
     # Generate data points in the middle of each grid cell
-    gridDatasourceDf = util.generateGrid(minPoint, maxPoint, centerPoint=gridStartPos,
-                                         grid_size_x=gridSizeX, grid_size_y=gridSizeY)
+    grid_datasource_df = util.generate_grid(min_point, max_point, center_point=grid_start_pos,
+                                            grid_size_x=gridSizeX, grid_size_y=gridSizeY)
 
-    gridDatasourceDf['alpha'] = 0.1
-    gridDatasourceDf['gridSizeX'] = gridSizeX
-    gridDatasourceDf['gridSizeY'] = gridSizeY
-    # gridDatasourceDf = util.assign_points_to_grid(datasourceDf, gridDatasourceDf)
-    gridDatasource = ColumnDataSource(gridDatasourceDf)
+    grid_datasource_df['alpha'] = 0.1
+    grid_datasource_df['gridSizeX'] = gridSizeX
+    grid_datasource_df['gridSizeY'] = gridSizeY
+    # grid_datasource_df = util.assign_points_to_grid(datasource_df, grid_datasource_df)
+    grid_datasource = ColumnDataSource(grid_datasource_df)
 
     # Create a Bokeh plot
-    gridPlot = plot_figure.rect('centerX', 'centerY', 'gridSizeX', 'gridSizeY',
-                                source=gridDatasource,
-                                fill_color="lightblue",
-                                line_color="black",
-                                line_alpha='alpha',
-                                fill_alpha='alpha')
+    grid_plot = plot_figure.rect('centerX', 'centerY', 'gridSizeX', 'gridSizeY',
+                                 source=grid_datasource,
+                                 fill_color="lightblue",
+                                 line_color="black",
+                                 line_alpha='alpha',
+                                 fill_alpha='alpha')
 
     # Create a scatter plot
-    scatterPlot = plot_figure.scatter(
+    scatter_plot = plot_figure.scatter(
         'x',
         'y',
         source=datasource,
@@ -107,30 +109,34 @@ def plotBokeh(dataFrames, datas, spikePlotImagesPath, dumpFilesPaths, titles, bo
 
     # Custom Tools
 
-    hoverVariableString = ""
-    for variable in displayHoverVariables:
-        hoverVariableString += f"""<span style='font-size: 8px; color: #224499'>{variable}:</span>\n
+    hover_variable_string = ""
+    for variable in display_hover_variables:
+        hover_variable_string += f"""<span style='font-size: 8px; color: #224499'>{variable}:</span>\n
                 <span style='font-size: 8px'>@{variable}</span>\n"""
 
-    scatterPlotHoverTool = HoverTool(tooltips=f"""
+    scatter_plot_hover_tool = HoverTool(tooltips=f"""
         <div>
-            {hoverVariableString}
+            {hover_variable_string}
         </div>
 
         <div>
             <img
-                src="file://{imagesPath}""" + """/image_@{index}.png" height="100" alt="Image"
+                src="file://{images_path}""" + """/image_@{index}.png" height="100" alt="Image"
                 style="float: left; margin: 0px 15px 15px 0px;"
                 border="2"
             />
     </div>
-    """, renderers=[scatterPlot])
+    """, renderers=[scatter_plot])
     # TODO finish grid hover tool
-    gridPlotHoverTool = HoverTool(tooltips="""
+    grid_plot_hover_tool = HoverTool(tooltips="""
     <div>
-        Grid ID: @{gridID}
-        Grid Point Indices: @{pointIndices}
-        Grid Point Neurons: @{pointNeurons}
+        <span style='font-size: 8px; color: #224499'>Grid ID:</span>\n
+        <span style='font-size: 8px'>@{gridID}</span>\n
+        <span style='font-size: 8px; color: #224499'>Grid Point Indices:</span>\n
+        <span style='font-size: 8px'>@{pointIndices}</span>\n
+        <span style='font-size: 8px; color: #224499'>Grid Point Neurons:</span>\n
+        <span style='font-size: 8px'>@{pointNeurons}</span>\n
+        
     </div>
     <div>
         <img src="data:image/png;base64, @{image}" style="float: left; margin: 0px 15px 15px 0px; width: 100px; height: auto;">
@@ -138,51 +144,52 @@ def plotBokeh(dataFrames, datas, spikePlotImagesPath, dumpFilesPaths, titles, bo
     </div>
            
     </div>
-    """, renderers=[gridPlot])
+    """, renderers=[grid_plot])
 
     # Add a HoverTool to display the Matplotlib plot when hovering over a data point
-    plot_figure.add_tools(scatterPlotHoverTool)
-    plot_figure.add_tools(gridPlotHoverTool)
+    plot_figure.add_tools(scatter_plot_hover_tool)
+    plot_figure.add_tools(grid_plot_hover_tool)
 
     # Create an empty line Div for spacing
-    blankDiv = Div(text="<br>", width=400, height=5)
+    blank_div = Div(text="<br>", width=400, height=5)
 
     # General
 
-    generalTitleDiv = Div(text="<h3>General: </h3>", width=400, height=20)
+    general_title_div = Div(text="<h3>General: </h3>", width=400, height=20)
 
-    optionsSelectData = titles
-    selectData = Select(title="Data:", value=startDropdownDataOption, options=optionsSelectData)
+    options_select_data = titles
+    select_data = Select(title="Data:", value=start_dropdown_data_option, options=options_select_data)
 
-    optionsFilterMultiChoiceValues = {}
-    optionsSelectColor = ["All", "Cluster"]
+    options_filter_multi_choice_values = {}
+    options_select_color = ["all", "Cluster"]
 
-    for option in dataVariables:
-        optionsSelectColor.append(option)
-        for value in np.unique(dataFrames[startDropdownDataOption][option]):
-            optionsFilterMultiChoiceValues[f"{option} == {value}"] = (option, value)
+    for option in data_variables:
+        options_select_color.append(option)
+        for value in np.unique(data_frames[start_dropdown_data_option][option]):
+            options_filter_multi_choice_values[f"{option} == {value}"] = (option, value)
 
-    selectColor = Select(title="Color:", value=optionsSelectColor[0], options=optionsSelectColor)
+    select_color = Select(title="Color:", value=options_select_color[0], options=options_select_color)
 
-    optionsFilterMultiChoice = list(optionsFilterMultiChoiceValues.keys())
-    orFilterMultiChoice = MultiChoice(title="'OR' Filter:", value=[], options=optionsFilterMultiChoice, width=200)
-    andFilterMultiChoice = MultiChoice(title="'AND' Filter:", value=[], options=optionsFilterMultiChoice, width=200)
-    exportDataButton = Button(label="Export Data")
+    options_filter_multi_choice = list(options_filter_multi_choice_values.keys())
+    or_filter_multi_choice = MultiChoice(title="'OR' Filter:", value=[], options=options_filter_multi_choice, width=200)
+    and_filter_multi_choice = MultiChoice(title="'AND' Filter:", value=[], options=options_filter_multi_choice,
+                                          width=200)
+    export_data_button = Button(label="Export Data")
 
-    generalLayout = column(generalTitleDiv, blankDiv, selectData, selectColor, orFilterMultiChoice,
-                           andFilterMultiChoice, exportDataButton)
+    general_layout = column(general_title_div, blank_div, select_data, select_color, or_filter_multi_choice,
+                            and_filter_multi_choice, export_data_button)
 
     # Hover Tool and Grid selection
-    enableGridCheckbox = Checkbox(label="Grid Enabled", active=False)
-    gridPlot.visible = enableGridCheckbox.active
-    gridSizeXTextInput = TextInput(value="1.0", title="Grid Size X:", disabled=False)
-    gridSizeYTextInput = TextInput(value="1.0", title="Grid Size Y:", disabled=False)
-    gridSizeButton = Button(label="Update")
+    enable_grid_checkbox = Checkbox(label="Grid Enabled", active=False)
+    grid_plot.visible = enable_grid_checkbox.active
+    grid_size_x_text_input = TextInput(value="1.0", title="Grid Size X:", disabled=False)
+    grid_size_y_text_input = TextInput(value="1.0", title="Grid Size Y:", disabled=False)
+    grid_size_button = Button(label="Update")
 
-    hoverToolLayout = column(enableGridCheckbox, gridSizeXTextInput, gridSizeYTextInput, gridSizeButton)
+    hover_tool_layout = column(enable_grid_checkbox, grid_size_x_text_input, grid_size_y_text_input, grid_size_button)
 
     # UMAP
-    umapTitleDiv = Div(text="<h3>UMAP Parameters: </h3>", width=400, height=20)
+    umap_title_div = Div(text="<h3>UMAP Parameters: </h3>", width=400, height=20)
 
     if experimental:
         n_neighbors_slider = Slider(title="n_neighbors", start=2, end=50, step=1, value=20)
@@ -191,160 +198,165 @@ def plotBokeh(dataFrames, datas, spikePlotImagesPath, dumpFilesPaths, titles, bo
         n_neighbors_slider = Slider(title="n_neighbors", start=10, end=20, step=1, value=20)
         min_dist_slider = Slider(title="min_dist", start=0.00, end=0.10, step=0.01, value=0.0)
 
-    umapLayout = column(umapTitleDiv, blankDiv, n_neighbors_slider, min_dist_slider)
+    umap_layout = column(umap_title_div, blank_div, n_neighbors_slider, min_dist_slider)
 
     # Cluster Parameters
 
-    clusterParametersTitleDiv = Div(text="<h3>Cluster Parameters: </h3>", width=400, height=20)
-    updateClustersToggle = Checkbox(label="Update Clusters (experimental)", active=True)
+    cluster_parameters_title_div = Div(text="<h3>Cluster Parameters: </h3>", width=400, height=20)
+    update_clusters_toggle = Checkbox(label="Update Clusters (experimental)", active=True)
     min_cluster_size_slider = Slider(title="min_cluster_size", start=1, end=50, step=1, value=5, disabled=False)
     min_samples_slider = Slider(title="min_sample", start=1, end=10, step=1, value=1, disabled=False)
-    optionsClusterSelectionMethod = ['eom', 'leaf']
-    clusterSelectionMethodToggle = RadioGroup(labels=optionsClusterSelectionMethod,
-                                              active=0)  # Set "eom" as the default
+    options_cluster_selection_method = ['eom', 'leaf']
+    cluster_selection_method_toggle = RadioGroup(labels=options_cluster_selection_method,
+                                                 active=0)  # Set "eom" as the default
     cluster_selection_epsilon_slider = Slider(title="cluster_selection_epsilon", start=0.00, end=1.0, step=0.01,
                                               value=0.0)
-    optionsMetric = ["euclidean", "manhattan", "correlation", "jaccard", "hamming", "chebyshev", "canberra",
-                     "braycurtis"]
-    selectMetric = Select(title="metric:", value=optionsMetric[0], options=optionsMetric)
+    options_metric = ["euclidean", "manhattan", "correlation", "jaccard", "hamming", "chebyshev", "canberra",
+                      "braycurtis"]
+    select_metric = Select(title="metric:", value=options_metric[0], options=options_metric)
 
-    allowSingleLinkageToggle = Checkbox(label="Allow Single-Linkage", active=False)
-    approximateMinimumSpanningTreeToggle = Checkbox(label="Approximate Minimum Spanning Tree", active=True)
+    allow_single_linkage_toggle = Checkbox(label="Allow Single-Linkage", active=False)
+    approximate_minimum_spanning_tree_toggle = Checkbox(label="Approximate Minimum Spanning Tree", active=True)
 
-    clusterParametersLayout = column(clusterParametersTitleDiv, blankDiv, updateClustersToggle, min_cluster_size_slider,
-                                     min_samples_slider,
-                                     cluster_selection_epsilon_slider,
-                                     allowSingleLinkageToggle, approximateMinimumSpanningTreeToggle, selectMetric,
-                                     clusterSelectionMethodToggle)
+    cluster_parameters_layout = column(cluster_parameters_title_div, blank_div, update_clusters_toggle,
+                                       min_cluster_size_slider,
+                                       min_samples_slider,
+                                       cluster_selection_epsilon_slider,
+                                       allow_single_linkage_toggle, approximate_minimum_spanning_tree_toggle,
+                                       select_metric,
+                                       cluster_selection_method_toggle)
 
     # Cluster Selection
     # TODO fix Cluster Selection bug
-    clusterSelectionTitleDiv = Div(text="<h3>Cluster Selection: </h3>", width=400, height=20)
+    cluster_selection_title_div = Div(text="<h3>Cluster Selection: </h3>", width=400, height=20)
 
-    highlightClusterCheckbox = Checkbox(label="Highlight Cluster", active=False)
-    selectedClusterTextInput = TextInput(value="0", title="Cluster:", disabled=True)
+    highlight_cluster_checkbox = Checkbox(label="Highlight Cluster", active=False)
+    selected_cluster_text_input = TextInput(value="0", title="Cluster:", disabled=True)
     select_cluster_slider = Slider(title="cluster", start=-1,
-                                   end=len(np.unique(dataFrames[startDropdownDataOption]['Cluster'])), step=1, value=0,
+                                   end=len(np.unique(data_frames[start_dropdown_data_option]['Cluster'])), step=1,
+                                   value=0,
                                    disabled=True)
-    clusterSelectionLayout = column(clusterSelectionTitleDiv, blankDiv, highlightClusterCheckbox,
-                                    selectedClusterTextInput,
-                                    select_cluster_slider)
+    cluster_selection_layout = column(cluster_selection_title_div, blank_div, highlight_cluster_checkbox,
+                                      selected_cluster_text_input,
+                                      select_cluster_slider)
 
-    mainLayoutTitleDiv = Div(text="<h2>Cluster Exploration and Labeling Library: </h2>", width=800, height=20)
+    main_layout_title_div = Div(text="<h2>Cluster Exploration and Labeling Library: </h2>", width=800, height=20)
 
-    mainLayoutRow = row(generalLayout, column(umapLayout, clusterSelectionLayout), clusterParametersLayout)
-    mainLayout = column(mainLayoutTitleDiv, blankDiv,
-                        mainLayoutRow,
-                        row(plot_figure, hoverToolLayout))
+    main_layout_row = row(general_layout, column(umap_layout, cluster_selection_layout), cluster_parameters_layout)
+    main_layout = column(main_layout_title_div, blank_div,
+                         main_layout_row,
+                         row(plot_figure, hover_tool_layout))
 
-    currentCluster = 0
+    current_cluster = 0
 
     # Callback function to update graph when sliders change
     def update_umap(attr, old, new):
         n_neighbors = n_neighbors_slider.value
         min_dist = min_dist_slider.value
-        nonlocal datasourceDf, updateClusterToggleDf, currentCluster
+        nonlocal datasource_df, update_cluster_toggle_df, current_cluster
         # Resets to initial state
-        datasourceDf = pd.DataFrame.copy(dataFrames[selectData.value])
+        datasource_df = pd.DataFrame.copy(data_frames[select_data.value])
         # TODO fix Update Cluster
-        print(datasourceDf)
-        print(updateClusterToggleDf)
-        print(updateClusterToggleDf[updateClusterToggleDf["Task"] == "1"])
+        if debug: print(datasource_df)
+        if debug: print(update_cluster_toggle_df)
+        if debug: print(update_cluster_toggle_df[update_cluster_toggle_df["Task"] == "1"])
         # Set the 'ID' column as the index in both DataFrames
-        # datasourceDf.set_index('OwnIndex', inplace=True)
-        # updateClusterToggleDf.set_index('OwnIndex', inplace=True)
-        datasourceDf.update(updateClusterToggleDf["Cluster"])
-        print(datasourceDf[datasourceDf["Task"] == "1"])
-        # datasourceDf.reset_index(inplace=True)
+        # datasource_df.set_index('OwnIndex', inplace=True)
+        # update_cluster_toggle_df.set_index('OwnIndex', inplace=True)
+        datasource_df.update(update_cluster_toggle_df["Cluster"])
+        if debug: print(datasource_df[datasource_df["Task"] == "1"])
+        # datasource_df.reset_index(inplace=True)
 
-        umap_result = util.getUMAPOut(datas[selectData.value],
-                                      os.path.abspath(dumpFilesPaths[selectData.value]).replace("\\", '/'),
-                                      n_neighbors=n_neighbors, min_dist=round(min_dist, 2))
-        datasourceDf['x'], datasourceDf['y'] = umap_result[:, 0], umap_result[:, 1]
+        umap_result = util.get_umap_out(datas[select_data.value],
+                                        os.path.abspath(dump_files_paths[select_data.value]).replace("\\", '/'),
+                                        n_neighbors=n_neighbors, min_dist=round(min_dist, 2))
+        datasource_df['x'], datasource_df['y'] = umap_result[:, 0], umap_result[:, 1]
         # datasource.data.update({'x': umap_result[:, 0], 'y': umap_result[:, 1]})
-        if len(orFilterMultiChoice.value) != 0:
-            datasourceDf = pd.DataFrame(columns=datasourceDf.columns)
-            for option in orFilterMultiChoice.value:
-                initialDf = pd.DataFrame.copy(dataFrames[selectData.value])
+        if len(or_filter_multi_choice.value) != 0:
+            datasource_df = pd.DataFrame(columns=datasource_df.columns)
+            for option in or_filter_multi_choice.value:
+                initial_df = pd.DataFrame.copy(data_frames[select_data.value])
                 # makes a dataframe with just the filtered entries and merges it with the other selected values
-                filterDf = initialDf[
-                    initialDf[optionsFilterMultiChoiceValues[option][0]] == optionsFilterMultiChoiceValues[option][
+                filter_df = initial_df[
+                    initial_df[options_filter_multi_choice_values[option][0]] ==
+                    options_filter_multi_choice_values[option][
                         1]]
-                datasourceDf = pd.merge(datasourceDf, filterDf, how='outer')
+                datasource_df = pd.merge(datasource_df, filter_df, how='outer')
 
-            datasourceDf = datasourceDf.drop_duplicates(keep="first")
+            datasource_df = datasource_df.drop_duplicates(keep="first")
             # shuffles Data order for plotting
-            datasourceDf = datasourceDf.sample(frac=1, random_state=42)
+            datasource_df = datasource_df.sample(frac=1, random_state=42)
 
-        if len(andFilterMultiChoice.value) != 0:
-            for option in andFilterMultiChoice.value:
-                datasourceDf = datasourceDf[
-                    datasourceDf[optionsFilterMultiChoiceValues[option][0]] == optionsFilterMultiChoiceValues[option][
+        if len(and_filter_multi_choice.value) != 0:
+            for option in and_filter_multi_choice.value:
+                datasource_df = datasource_df[
+                    datasource_df[options_filter_multi_choice_values[option][0]] ==
+                    options_filter_multi_choice_values[option][
                         1]]
 
-                if debug: print(type(datasourceDf[optionsFilterMultiChoiceValues[option][0]]))
-                if debug: print(type(optionsFilterMultiChoiceValues[option][1]))
-                if debug: print(datasourceDf[optionsFilterMultiChoiceValues[option][0]])
+                if debug: print(type(datasource_df[options_filter_multi_choice_values[option][0]]))
+                if debug: print(type(options_filter_multi_choice_values[option][1]))
+                if debug: print(datasource_df[options_filter_multi_choice_values[option][0]])
 
-        if debug: print(datasourceDf)
-        umap_result = datasourceDf[['x', 'y']].values
-        if updateClustersToggle.active:
+        if debug: print(datasource_df)
+        umap_result = datasource_df[['x', 'y']].values
+        if update_clusters_toggle.active:
             clusters = []
             if len(umap_result) > 0:
                 # Apply HDBSCAN clustering
                 clusterer = hdbscan.HDBSCAN(min_cluster_size=min_cluster_size_slider.value,
                                             min_samples=min_samples_slider.value,
-                                            allow_single_cluster=allowSingleLinkageToggle.active,
-                                            approx_min_span_tree=approximateMinimumSpanningTreeToggle.active,
-                                            cluster_selection_method=optionsClusterSelectionMethod[
-                                                clusterSelectionMethodToggle.active],
-                                            metric=selectMetric.value,
+                                            allow_single_cluster=allow_single_linkage_toggle.active,
+                                            approx_min_span_tree=approximate_minimum_spanning_tree_toggle.active,
+                                            cluster_selection_method=options_cluster_selection_method[
+                                                cluster_selection_method_toggle.active],
+                                            metric=select_metric.value,
                                             cluster_selection_epsilon=cluster_selection_epsilon_slider.value)
                 clusters = clusterer.fit_predict(umap_result)
 
             # Add cluster labels to your dataframe
-            datasourceDf['Cluster'] = clusters
-        if debug: print(datasourceDf)
+            datasource_df['Cluster'] = clusters
+        if debug: print(datasource_df)
 
-        select_cluster_slider.end = len(np.unique(datasourceDf['Cluster']))
+        select_cluster_slider.end = len(np.unique(datasource_df['Cluster']))
 
         # Update the existing datasource
-        datasource.data.update(ColumnDataSource(datasourceDf).data)
-        updateCurrentCluster(attr=None, old=None, new=None)
-        updateGrid(attr=None, old=None, new=None)
+        datasource.data.update(ColumnDataSource(datasource_df).data)
+        update_current_cluster(attr=None, old=None, new=None)
+        update_grid(attr=None, old=None, new=None)
         datasource.data.update(datasource.data)
         update_category(attr=None, old=None, new=None)
 
-    def updateCurrentCluster(attr, old, new):
-        nonlocal currentCluster
+    def update_current_cluster(attr, old, new):
+        nonlocal current_cluster
 
-        if highlightClusterCheckbox.active:
-            if currentCluster != select_cluster_slider.value:
-                currentCluster = select_cluster_slider.value
-                selectedClusterTextInput.value = str(currentCluster)
-            elif currentCluster != int(selectedClusterTextInput.value):
-                currentCluster = int(selectedClusterTextInput.value)
-                select_cluster_slider.value = currentCluster
+        if highlight_cluster_checkbox.active:
+            if current_cluster != select_cluster_slider.value:
+                current_cluster = select_cluster_slider.value
+                selected_cluster_text_input.value = str(current_cluster)
+            elif current_cluster != int(selected_cluster_text_input.value):
+                current_cluster = int(selected_cluster_text_input.value)
+                select_cluster_slider.value = current_cluster
 
             select_cluster_slider.disabled = False
-            selectedClusterTextInput.disabled = False
+            selected_cluster_text_input.disabled = False
             print(
-                f"Current Cluster: {currentCluster}, Current Cluster Size: {len(datasourceDf[datasourceDf['Cluster'] == currentCluster])}")
-            for i, cluster in enumerate(datasourceDf['Cluster']):  # Assuming cluster_data is a list of cluster labels
-                if cluster == currentCluster:
+                f"Current Cluster: {current_cluster}, Current Cluster Size: {len(datasource_df[datasource_df['Cluster'] == current_cluster])}")
+            for i, cluster in enumerate(datasource_df['Cluster']):  # Assuming cluster_data is a list of cluster labels
+                if cluster == current_cluster:
                     datasource.data['alpha'][i] = 1  # Make points in the selected cluster fully visible
                 else:
                     datasource.data['alpha'][i] = 0.05  # Make points in other clusters more transparent
 
         else:
             select_cluster_slider.disabled = True
-            selectedClusterTextInput.disabled = True
+            selected_cluster_text_input.disabled = True
 
-            for i, cluster in enumerate(datasourceDf['Cluster']):  # Assuming cluster_data is a list of cluster labels
+            for i, cluster in enumerate(datasource_df['Cluster']):  # Assuming cluster_data is a list of cluster labels
                 datasource.data['alpha'][i] = 1  # Make points in the selected cluster fully visible
 
-        clustered_count = len(datasourceDf[datasourceDf['Cluster'] != -1])
-        unclustered_count = len(datasourceDf[datasourceDf['Cluster'] == -1])
+        clustered_count = len(datasource_df[datasource_df['Cluster'] != -1])
+        unclustered_count = len(datasource_df[datasource_df['Cluster'] == -1])
 
         # Check if the denominator (unclustered_count) is zero
         if unclustered_count == 0:
@@ -352,17 +364,17 @@ def plotBokeh(dataFrames, datas, spikePlotImagesPath, dumpFilesPaths, titles, bo
         else:
             ratio = round(clustered_count / unclustered_count, 3)
         # Check if the denominator (unclustered_count) is zero
-        if len(datasourceDf) == 0:
+        if len(datasource_df) == 0:
             percentage = "N/A"
-            clusterNumber = 0
+            cluster_number = 0
         else:
-            percentage = round((clustered_count / len(datasourceDf)) * 100, 2)
-            clusterNumber = len(np.unique(datasourceDf['Cluster'])) - 1
+            percentage = round((clustered_count / len(datasource_df)) * 100, 2)
+            cluster_number = len(np.unique(datasource_df['Cluster'])) - 1
 
         print(
-            f"Data: {selectData.value}, 'AND' Filter: {andFilterMultiChoice.value}, 'OR' Filter: {orFilterMultiChoice.value}, Length: {len(datasourceDf)}")
+            f"Data: {select_data.value}, 'AND' Filter: {and_filter_multi_choice.value}, 'OR' Filter: {or_filter_multi_choice.value}, Length: {len(datasource_df)}")
         print(
-            f"Clusters: {clusterNumber}, Clustered: {percentage}%, Clustered/Unclustered Ratio: {ratio}, Clustered: {clustered_count}, Unclustered: {unclustered_count}"
+            f"Clusters: {cluster_number}, Clustered: {percentage}%, Clustered/Unclustered Ratio: {ratio}, Clustered: {clustered_count}, Unclustered: {unclustered_count}"
         )
 
         print("\n")
@@ -380,105 +392,101 @@ def plotBokeh(dataFrames, datas, spikePlotImagesPath, dumpFilesPaths, titles, bo
         # clicked_label = datasource.data['Neuron'][index]
         # print(f"Point {clicked_label} was clicked!")
 
-    colorBar_initilized = False
+    color_bar_initialized = False
     color_bar = ColorBar()
 
     def update_category(attr, old, new):
-        nonlocal scatterPlot, color_bar, colorBar_initilized
-        global colorPalette
-        if selectColor.value == "All":
-            scatterPlot.glyph.fill_color = "blue"
-            scatterPlot.glyph.line_color = "blue"
+        nonlocal scatter_plot, color_bar, color_bar_initialized, color_palette
+        if select_color.value == "all":
+            scatter_plot.glyph.fill_color = "blue"
+            scatter_plot.glyph.line_color = "blue"
+            datasource.data.update(ColumnDataSource(datasource_df).data)
         else:
-            uniqueFactors = np.unique(datasourceDf[selectColor.value])
-            if selectColor.value == "Cluster":
-                uniqueFactors = uniqueFactors[uniqueFactors != -1]
+            unique_factors = np.unique(datasource_df[select_color.value])
+            if select_color.value == "Cluster":
+                unique_factors = unique_factors[unique_factors != -1]
             try:
-                uniqueFactors = sorted(uniqueFactors)
-                print(f"Color adjusted to and sorted by {selectColor.value}")
+                unique_factors = sorted(unique_factors)
+                print(f"Color adjusted to and sorted by {select_color.value}")
 
             except TypeError:
-                print(f"Color adjusted unsorted by {selectColor.value}")
-            newFactors = [str(x) for x in uniqueFactors]
+                print(f"Color adjusted unsorted by {select_color.value}")
+            new_factors = [str(x) for x in unique_factors]
 
-            datasourceDf['ColorMappingCategory'] = datasourceDf[selectColor.value].astype(str)
-            datasource.data.update(ColumnDataSource(datasourceDf).data)
+            datasource_df['ColorMappingCategory'] = datasource_df[select_color.value].astype(str)
+            datasource.data.update(ColumnDataSource(datasource_df).data)
 
-            customColorPalette = list([colorPalette[int(int(i * (len(colorPalette) - 1) / len(uniqueFactors)))] for i in
-                                       range(len(uniqueFactors))])
-            random.shuffle(customColorPalette)
-            colorMapping = CategoricalColorMapper(
-                factors=newFactors,
-                palette=customColorPalette)
+            custom_color_palette = list(
+                [color_palette[int(int(i * (len(color_palette) - 1) / len(unique_factors)))] for i in
+                 range(len(unique_factors))])
+            random.shuffle(custom_color_palette)
+            color_mapping = CategoricalColorMapper(
+                factors=new_factors,
+                palette=custom_color_palette)
 
-            scatterPlot.glyph.fill_color = {'field': 'ColorMappingCategory', 'transform': colorMapping}
-            scatterPlot.glyph.line_color = {'field': 'ColorMappingCategory', 'transform': colorMapping}
+            scatter_plot.glyph.fill_color = {'field': 'ColorMappingCategory', 'transform': color_mapping}
+            scatter_plot.glyph.line_color = {'field': 'ColorMappingCategory', 'transform': color_mapping}
 
-            if not colorBar_initilized:
+            if not color_bar_initialized:
                 # Create a color bar for the color mapper
-                color_bar = ColorBar(title=selectColor.value, color_mapper=colorMapping, location=(0, 0))
+                color_bar = ColorBar(title=select_color.value, color_mapper=color_mapping, location=(0, 0))
                 # Add the color bar to the figure
                 plot_figure.add_layout(color_bar, 'below')
-                colorBar_initilized = True
+                color_bar_initialized = True
             else:
-                color_bar.color_mapper = colorMapping
+                color_bar.color_mapper = color_mapping
 
-            if selectColor.value == "All":
+            if select_color.value == "all":
                 color_bar.visible = False
             else:
                 color_bar.visible = True
-                color_bar.title = selectColor.value
+                color_bar.title = select_color.value
 
-        # colorMappingFactors=[str(x) for x in datasourceDf["ColorMappingCategory"].unique()]
-        # colorMapping.factors=colorMappingFactors
-        # colorMapping.palette=[colorPalette[i % len(colorPalette)] for i in range(len(datasourceDf['ColorMappingCategory'].unique()))]
-        # color_bar.glyph.color = {'field': 'ColorMappingCategory', 'transform': colorMapping}
+    def update_grid_button():
+        update_grid(attr=None, old=None, new=None)
 
-    def updateGridButton():
-        updateGrid(attr=None, old=None, new=None)
-
-    def updateClusterToggleFunction(attr, old, new):
-        nonlocal updateClusterToggleDf, datasourceDf
-        if updateClustersToggle.active:
-            updateClusterToggleDf = pd.DataFrame.copy(datasourceDf)
+    def update_cluster_toggle_function(attr, old, new):
+        nonlocal update_cluster_toggle_df, datasource_df
+        if update_clusters_toggle.active:
+            update_cluster_toggle_df = pd.DataFrame.copy(datasource_df)
         update_umap(attr=None, old=None, new=None)
 
-    def updateGrid(attr, old, new):
-        global gridSizeY, gridSizeX
-        if enableGridCheckbox.active:
-            gridSizeX = float(gridSizeXTextInput.value)
-            gridSizeY = float(gridSizeYTextInput.value)
-            gridStartPos = (0.0, 0.0)
-            minPoint = (datasourceDf["x"].min(), datasourceDf["y"].min())
-            maxPoint = (datasourceDf["x"].max(), datasourceDf["y"].max())
+    def update_grid(attr, old, new):
+        global grid_size_y, grid_size_x
+        if enable_grid_checkbox.active:
+            grid_size_x = float(grid_size_x_text_input.value)
+            grid_size_y = float(grid_size_y_text_input.value)
+            grid_start_pos = (0.0, 0.0)
+            min_point = (datasource_df["x"].min(), datasource_df["y"].min())
+            max_point = (datasource_df["x"].max(), datasource_df["y"].max())
 
             # Generate data points in the middle of each grid cell
-            gridDatasourceDf = util.generateGrid(minPoint, maxPoint, centerPoint=gridStartPos,
-                                                 grid_size_x=gridSizeX, grid_size_y=gridSizeY)
-            gridDatasourceDf['gridSizeX'] = gridSizeX
-            gridDatasourceDf['gridSizeY'] = gridSizeY
-            gridDatasourceDf['alpha'] = 0.1
-            gridDatasourceDf = util.assign_points_to_grid(datasourceDf, gridDatasourceDf,
-                                                          [('index', 'pointIndices'), ("Neuron", "pointNeurons")])
+            grid_datasource_df = util.generate_grid(min_point, max_point, center_point=grid_start_pos,
+                                                    grid_size_x=grid_size_x, grid_size_y=grid_size_y)
+            grid_datasource_df['gridSizeX'] = grid_size_x
+            grid_datasource_df['gridSizeY'] = grid_size_y
+            grid_datasource_df['alpha'] = 0.1
+            grid_datasource_df = util.assign_points_to_grid(datasource_df, grid_datasource_df,
+                                                            [('index', 'pointIndices'), ("Neuron", "pointNeurons")])
 
-            gridDatasource.data.update(ColumnDataSource(gridDatasourceDf).data)
+            grid_datasource.data.update(ColumnDataSource(grid_datasource_df).data)
 
-        gridPlot.visible = enableGridCheckbox.active
+        grid_plot.visible = enable_grid_checkbox.active
 
-    def exportData():
+    def export_data():
         # Convert the DataFrame to a dictionary
-        data_dict = {'df': datasourceDf.to_dict("list")}
+        data_dict = {'df': datasource_df.to_dict("list")}
         filename = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + f"_umap_cluster_output"
 
         # Save the dictionary to a MATLAB .mat file
-        scipy.io.savemat(os.path.join(outputFilePath, filename + ".mat"), data_dict)
-        np.save(os.path.join(outputFilePath, filename + ".npy"), datasourceDf.to_numpy())
+        scipy.io.savemat(os.path.join(output_file_path, filename + ".mat"), data_dict)
+        np.save(os.path.join(output_file_path, filename + ".npy"), datasource_df.to_numpy())
         print(f"Data has been saved to {filename}_umap_cluster_output.mat")
         print(f"Data has been saved to {filename}_umap_cluster_output.npy")
 
     def hover_callback(attr, old_index, new_index):
         if new_index:
-            selected_data = gridDatasource.data
+            selected_data = grid_datasource.data
             selected_x = selected_data['x'][new_index[0]]
             selected_y = selected_data['y'][new_index[0]]
             selected_index = selected_data['index'][new_index[0]]
@@ -489,45 +497,46 @@ def plotBokeh(dataFrames, datas, spikePlotImagesPath, dumpFilesPaths, titles, bo
     min_dist_slider.on_change('value_throttled', update_umap)
     min_samples_slider.on_change('value_throttled', update_umap)
     cluster_selection_epsilon_slider.on_change('value_throttled', update_umap)
-    select_cluster_slider.on_change('value_throttled', updateCurrentCluster)
+    select_cluster_slider.on_change('value_throttled', update_current_cluster)
     min_cluster_size_slider.on_change('value_throttled', update_umap)
     # Attach the callback function to the dropdown menu
-    selectData.on_change('value', update_umap)
-    selectMetric.on_change('value', update_umap)
-    selectColor.on_change('value', update_category)
-    selectedClusterTextInput.on_change('value', updateCurrentCluster)
-    gridSizeButton.on_click(updateGridButton)
-    exportDataButton.on_click(exportData)
-    enableGridCheckbox.on_change('active', updateGrid)
+    select_data.on_change('value', update_umap)
+    select_metric.on_change('value', update_umap)
+    select_color.on_change('value', update_category)
+    selected_cluster_text_input.on_change('value', update_current_cluster)
+    grid_size_button.on_click(update_grid_button)
+    export_data_button.on_click(export_data)
+    enable_grid_checkbox.on_change('active', update_grid)
 
     # Attach the callback function to the CheckboxGroup's active property
-    clusterSelectionMethodToggle.on_change("active", update_umap)
-    allowSingleLinkageToggle.on_change("active", update_umap)
-    approximateMinimumSpanningTreeToggle.on_change("active", update_umap)
-    updateClustersToggle.on_change("active", updateClusterToggleFunction)
+    cluster_selection_method_toggle.on_change("active", update_umap)
+    allow_single_linkage_toggle.on_change("active", update_umap)
+    approximate_minimum_spanning_tree_toggle.on_change("active", update_umap)
+    update_clusters_toggle.on_change("active", update_cluster_toggle_function)
     # Attach the callback function to the MultiChoice's "value" property
-    andFilterMultiChoice.on_change('value', update_umap)
-    orFilterMultiChoice.on_change('value', update_umap)
+    and_filter_multi_choice.on_change('value', update_umap)
+    or_filter_multi_choice.on_change('value', update_umap)
     # Attach the callback to the checkbox
-    highlightClusterCheckbox.on_change('active', updateCurrentCluster)
+    highlight_cluster_checkbox.on_change('active', update_current_cluster)
 
-    gridDatasource.selected.on_change('indices', hover_callback)
+    grid_datasource.selected.on_change('indices', hover_callback)
 
     plot_figure.on_event(Tap, on_point_click)
 
     # Create a layout for the sliders and plot
-    layout = column(mainLayout)
+    layout = column(main_layout)
     update_umap(attr=None, old=None, new=None)
 
-    if bokehShow:
+    if bokeh_show:
         # Show the plot
         show(layout)
     else:
         # for Bokeh Server
         curdoc().add_root(layout)
+    print("Finished loading Bokeh Plotting Interface")
 
 
-def plotAndReturnSpikes(fluorescence_array, fps=30, number_consecutive_recordings=6):
+def plot_and_return_spikes(fluorescence_array, fps=30, number_consecutive_recordings=6):
     # Calculate time values based on the frame rate per second
     n = len(fluorescence_array)
     time_values = np.arange(n) / fps
@@ -551,20 +560,20 @@ def plotAndReturnSpikes(fluorescence_array, fps=30, number_consecutive_recording
     return plt
 
 
-def plotAndSaveSpikes(neuronNumber, dataframe, outputFolder, fps=30, number_consecutive_recordings=6):
+def plot_and_save_spikes(neuron_number, dataframe, output_folder, fps=30, number_consecutive_recordings=6):
     # takes selected row (fluorescence data of one cell), makes it to an array and plots it
-    plt = plotAndReturnSpikes(dataframe.iloc[neuronNumber].values, fps=fps,
-                              number_consecutive_recordings=number_consecutive_recordings)
+    plt = plot_and_return_spikes(dataframe.iloc[neuron_number].values, fps=fps,
+                                 number_consecutive_recordings=number_consecutive_recordings)
     buf = io.BytesIO()
     plt.savefig(buf, format='png', dpi=80)
     buf.seek(0)
     # Ensure the output directory exists; create it if it doesn't
-    os.makedirs(outputFolder, exist_ok=True)
+    os.makedirs(output_folder, exist_ok=True)
 
     # Save each image as a separate PNG file
-    filePath = os.path.join(outputFolder, f"image_{neuronNumber}.png")
-    with open(filePath, "wb") as file:
+    file_path = os.path.join(output_folder, f"image_{neuron_number}.png")
+    with open(file_path, "wb") as file:
         file.write(buf.read())
 
-    print(f"Saved image {neuronNumber} to {filePath}")
+    print(f"Saved image {neuron_number} to {file_path}")
     plt.close()
