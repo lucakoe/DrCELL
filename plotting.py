@@ -1,3 +1,4 @@
+import base64
 import random
 import hdbscan
 import datetime
@@ -6,6 +7,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import scipy
 import umap.plot
+from PIL import Image
 from bokeh.events import Tap
 from bokeh.io import curdoc
 from bokeh.layouts import column, row
@@ -33,11 +35,11 @@ def generate_diagnostic_plots(umap_object, data):
 
 def plot_bokeh(data_frames, datas, spike_plot_images_path, dump_files_paths, titles=None, bokeh_show=True,
                start_dropdown_data_option="all", output_file_path="./data/output/", data_variables=None,
-               display_hover_variables=None, debug=False, experimental=False,
+               display_hover_variables=None, debug=False, experimental=False, hover_image_generation_function=None,
                color_palette=Muted9):
     if display_hover_variables is None:
         display_hover_variables = []
-    display_hover_variables.insert(0,"Cluster")
+    display_hover_variables.insert(0, "Cluster")
     if data_variables is None:
         data_variables = []
     if titles is None:
@@ -48,10 +50,21 @@ def plot_bokeh(data_frames, datas, spike_plot_images_path, dump_files_paths, tit
     for title in titles:
         data_frames[title] = data_frames[title].sample(frac=1, random_state=42)
         if debug: print(f"Dataframe {title}: \n{data_frames[title]}")
-        data_frames[title]['OwnIndex'] = data_frames[title].index
+        data_frames[title]['pdIndex'] = data_frames[title].index
         data_frames[title]['alpha'] = 1.0
         data_frames[title]['ColorMappingCategory'] = 1.0
         data_frames[title]['Cluster'] = -1
+        image = Image.new('RGB', (10, 10), color='black')
+        # Create an in-memory BytesIO buffer
+        buf = io.BytesIO()
+        image.save(buf, format='PNG')
+
+        # image_test=base64.b64encode(buf.getvalue())
+        # print(image_test)
+        data_frames[title]['image'] = base64.b64encode(buf.getvalue())
+        # image_test=base64.b64decode(image_test)
+        # image_test = Image.open(io.BytesIO(image_test))
+        # image_test.show()
 
     datasource_df = pd.DataFrame.copy(data_frames[start_dropdown_data_option])
     update_cluster_toggle_df = pd.DataFrame.copy(datasource_df)
@@ -83,6 +96,7 @@ def plot_bokeh(data_frames, datas, spike_plot_images_path, dump_files_paths, tit
     grid_datasource_df['alpha'] = 0.1
     grid_datasource_df['gridSizeX'] = gridSizeX
     grid_datasource_df['gridSizeY'] = gridSizeY
+    grid_datasource_df['image'] = base64.b64encode(buf.getvalue())
     # grid_datasource_df = util.assign_points_to_grid(datasource_df, grid_datasource_df)
     grid_datasource = ColumnDataSource(grid_datasource_df)
 
@@ -125,7 +139,13 @@ def plot_bokeh(data_frames, datas, spike_plot_images_path, dump_files_paths, tit
                 style="float: left; margin: 0px 15px 15px 0px;"
                 border="2"
             />
-    </div>
+        </div>
+        
+        <div>
+        <img src="data:image/png;base64, @{image}" style="float: left; margin: 0px 15px 15px 0px; width: 100px; height: auto;">
+
+        </div>
+        
     """, renderers=[scatter_plot])
     # TODO finish grid hover tool
     grid_plot_hover_tool = HoverTool(tooltips="""
@@ -169,24 +189,37 @@ def plot_bokeh(data_frames, datas, spike_plot_images_path, dump_files_paths, tit
             options_filter_multi_choice_values[f"{option} == {value}"] = (option, value)
 
     select_color = Select(title="Color:", value=options_select_color[0], options=options_select_color)
+    randomize_colors_button = Button(label="Randomize Colors")
 
     options_filter_multi_choice = list(options_filter_multi_choice_values.keys())
     or_filter_multi_choice = MultiChoice(title="'OR' Filter:", value=[], options=options_filter_multi_choice, width=200)
     and_filter_multi_choice = MultiChoice(title="'AND' Filter:", value=[], options=options_filter_multi_choice,
                                           width=200)
     export_data_button = Button(label="Export Data")
+    export_only_selection_toggle = Checkbox(label="Export only selection", active=True)
+    options_export_sort_category = datasource_df.columns.tolist()
+    select_export_sort_category = Select(title="Sort export by", value="Cluster", options=options_export_sort_category)
 
-    general_layout = column(general_title_div, blank_div, select_data, select_color, or_filter_multi_choice,
-                            and_filter_multi_choice, export_data_button)
+    general_layout = column(general_title_div, blank_div, select_data, select_color, randomize_colors_button,
+                            or_filter_multi_choice,
+                            and_filter_multi_choice, row(export_data_button, export_only_selection_toggle),
+                            select_export_sort_category)
+
+    # Stats
+    stats_title_div = Div(text="<h3>Statistics: </h3>", width=400, height=20)
+    stats_div = Div(text="<h2>stat init</h2>", width=400, height=20)
+    stats_layout = column(stats_title_div, blank_div, stats_div)
 
     # Hover Tool and Grid selection
+    grid_title_div = Div(text="<h3>Grid Settings: </h3>", width=400, height=20)
     enable_grid_checkbox = Checkbox(label="Grid Enabled", active=False)
     grid_plot.visible = enable_grid_checkbox.active
     grid_size_x_text_input = TextInput(value="1.0", title="Grid Size X:", disabled=False)
     grid_size_y_text_input = TextInput(value="1.0", title="Grid Size Y:", disabled=False)
     grid_size_button = Button(label="Update")
 
-    hover_tool_layout = column(enable_grid_checkbox, grid_size_x_text_input, grid_size_y_text_input, grid_size_button)
+    hover_tool_layout = column(grid_title_div, blank_div, enable_grid_checkbox, grid_size_x_text_input,
+                               grid_size_y_text_input, grid_size_button, stats_layout)
 
     # UMAP
     umap_title_div = Div(text="<h3>UMAP Parameters: </h3>", width=400, height=20)
@@ -261,8 +294,8 @@ def plot_bokeh(data_frames, datas, spike_plot_images_path, dump_files_paths, tit
         if debug: print(update_cluster_toggle_df)
         if debug: print(update_cluster_toggle_df[update_cluster_toggle_df["Task"] == "1"])
         # Set the 'ID' column as the index in both DataFrames
-        # datasource_df.set_index('OwnIndex', inplace=True)
-        # update_cluster_toggle_df.set_index('OwnIndex', inplace=True)
+        # datasource_df.set_index('pdIndex', inplace=True)
+        # update_cluster_toggle_df.set_index('pdIndex', inplace=True)
         datasource_df.update(update_cluster_toggle_df["Cluster"])
         if debug: print(datasource_df[datasource_df["Task"] == "1"])
         # datasource_df.reset_index(inplace=True)
@@ -355,27 +388,7 @@ def plot_bokeh(data_frames, datas, spike_plot_images_path, dump_files_paths, tit
             for i, cluster in enumerate(datasource_df['Cluster']):  # Assuming cluster_data is a list of cluster labels
                 datasource.data['alpha'][i] = 1  # Make points in the selected cluster fully visible
 
-        clustered_count = len(datasource_df[datasource_df['Cluster'] != -1])
-        unclustered_count = len(datasource_df[datasource_df['Cluster'] == -1])
-
-        # Check if the denominator (unclustered_count) is zero
-        if unclustered_count == 0:
-            ratio = "N/A"
-        else:
-            ratio = round(clustered_count / unclustered_count, 3)
-        # Check if the denominator (unclustered_count) is zero
-        if len(datasource_df) == 0:
-            percentage = "N/A"
-            cluster_number = 0
-        else:
-            percentage = round((clustered_count / len(datasource_df)) * 100, 2)
-            cluster_number = len(np.unique(datasource_df['Cluster'])) - 1
-
-        print(
-            f"Data: {select_data.value}, 'AND' Filter: {and_filter_multi_choice.value}, 'OR' Filter: {or_filter_multi_choice.value}, Length: {len(datasource_df)}")
-        print(
-            f"Clusters: {cluster_number}, Clustered: {percentage}%, Clustered/Unclustered Ratio: {ratio}, Clustered: {clustered_count}, Unclustered: {unclustered_count}"
-        )
+        update_stats()
 
         print("\n")
 
@@ -394,6 +407,9 @@ def plot_bokeh(data_frames, datas, spike_plot_images_path, dump_files_paths, tit
 
     color_bar_initialized = False
     color_bar = ColorBar()
+
+    def update_category_button():
+        update_category(attr=None, old=None, new=None)
 
     def update_category(attr, old, new):
         nonlocal scatter_plot, color_bar, color_bar_initialized, color_palette
@@ -466,6 +482,7 @@ def plot_bokeh(data_frames, datas, spike_plot_images_path, dump_files_paths, tit
             grid_datasource_df['gridSizeX'] = grid_size_x
             grid_datasource_df['gridSizeY'] = grid_size_y
             grid_datasource_df['alpha'] = 0.1
+            grid_datasource_df['image'] = base64.b64encode(buf.getvalue())
             grid_datasource_df = util.assign_points_to_grid(datasource_df, grid_datasource_df,
                                                             [('index', 'pointIndices'), ("Neuron", "pointNeurons")])
 
@@ -473,18 +490,53 @@ def plot_bokeh(data_frames, datas, spike_plot_images_path, dump_files_paths, tit
 
         grid_plot.visible = enable_grid_checkbox.active
 
+    def update_stats():
+        clustered_count = len(datasource_df[datasource_df['Cluster'] != -1])
+        unclustered_count = len(datasource_df[datasource_df['Cluster'] == -1])
+
+        # Check if the denominator (unclustered_count) is zero
+        if unclustered_count == 0:
+            ratio = "N/A"
+        else:
+            ratio = round(clustered_count / unclustered_count, 3)
+        # Check if the denominator (unclustered_count) is zero
+        if len(datasource_df) == 0:
+            percentage = "N/A"
+            cluster_number = 0
+        else:
+            percentage = round((clustered_count / len(datasource_df)) * 100, 2)
+            cluster_number = len(np.unique(datasource_df['Cluster'])) - 1
+
+        print(
+            f"Data: {select_data.value}, 'AND' Filter: {and_filter_multi_choice.value}, 'OR' Filter: {or_filter_multi_choice.value}, Length: {len(datasource_df)}")
+        print(
+            f"Clusters: {cluster_number}, Clustered: {percentage}%, Clustered/Unclustered Ratio: {ratio}, Clustered: {clustered_count}, Unclustered: {unclustered_count}"
+        )
+        stats_div.text = f"Data Length: {len(datasource_df)} <br> Clusters: {cluster_number} <br> Clustered: {percentage}% <br> Clustered/Unclustered Ratio: {ratio} <br> Clustered: {clustered_count} <br> Unclustered: {unclustered_count}"
+
     def export_data():
+        nonlocal output_file_path
+        export_df = datasource_df
+        if not export_only_selection_toggle:
+            # TODO doesnt work with updating dataframe
+            export_df = pd.DataFrame.copy(data_frames[select_data.value])
+
+            export_df.update(datasource_df)
+
+        export_df = export_df.sort_values(by=select_export_sort_category.value)
+
         # Convert the DataFrame to a dictionary
-        data_dict = {'df': datasource_df.to_dict("list")}
+        data_dict = {'df': export_df.to_dict("list")}
         filename = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + f"_umap_cluster_output"
 
         # Save the dictionary to a MATLAB .mat file
         scipy.io.savemat(os.path.join(output_file_path, filename + ".mat"), data_dict)
-        np.save(os.path.join(output_file_path, filename + ".npy"), datasource_df.to_numpy())
+        np.save(os.path.join(output_file_path, filename + ".npy"), export_df.to_numpy())
         print(f"Data has been saved to {filename}_umap_cluster_output.mat")
         print(f"Data has been saved to {filename}_umap_cluster_output.npy")
 
     def hover_callback(attr, old_index, new_index):
+        # plot_and_return_spike_images_b64()
         if new_index:
             selected_data = grid_datasource.data
             selected_x = selected_data['x'][new_index[0]]
@@ -506,6 +558,7 @@ def plot_bokeh(data_frames, datas, spike_plot_images_path, dump_files_paths, tit
     selected_cluster_text_input.on_change('value', update_current_cluster)
     grid_size_button.on_click(update_grid_button)
     export_data_button.on_click(export_data)
+    randomize_colors_button.on_click(update_category_button)
     enable_grid_checkbox.on_change('active', update_grid)
 
     # Attach the callback function to the CheckboxGroup's active property
@@ -558,6 +611,17 @@ def plot_and_return_spikes(fluorescence_array, fps=30, number_consecutive_record
     # plt.show()
 
     return plt
+
+
+def plot_and_return_spike_images_b64(fluorescence_array, fps=30, number_consecutive_recordings=6):
+    # takes selected row (fluorescence data of one cell), makes it to an array and plots it
+    plt = plot_and_return_spikes(fluorescence_array, fps=fps,
+                                 number_consecutive_recordings=number_consecutive_recordings)
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png', dpi=80)
+    image_b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+
+    return image_b64
 
 
 def plot_and_save_spikes(neuron_number, dataframe, output_folder, fps=30, number_consecutive_recordings=6):

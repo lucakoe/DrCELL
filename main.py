@@ -15,7 +15,7 @@ generate_and_save_spike_plots = False
 generate_diagnostic_plots = False
 generate_umap_parameters = False
 debug = False
-experimental = False
+experimental = True
 bokeh_show = False
 color_palette = Paired12
 # variables from the input data, that is selectable in the Color and Filter setting
@@ -117,7 +117,7 @@ for title in titles:
 
     if generate_umap_parameters:
         if experimental:
-            n_neighbors_values = range(10, 21, 1)
+            n_neighbors_values = range(2, 51, 1)
             min_dist_values = [0.00, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.10, 0.11, 0.12, 0.13,
                                0.14, 0.15, 0.16, 0.17, 0.18, 0.19, 0.20, 0.21, 0.22, 0.23, 0.24, 0.25, 0.26, 0.27,
                                0.28, 0.29, 0.30, 0.31, 0.32, 0.33, 0.34, 0.35, 0.36, 0.37, 0.38, 0.39, 0.40, 0.41,
@@ -166,7 +166,7 @@ plotting.plot_bokeh(cell_dfs, cleaned_datas, spike_plot_images_path, dump_files_
                     bokeh_show=bokeh_show,
                     start_dropdown_data_option=titles[0], data_variables=data_variables,
                     display_hover_variables=display_hover_variables, color_palette=color_palette, debug=debug,
-                    experimental=experimental)
+                    experimental=experimental, output_file_path=output_path)
 
 # # show results
 # cIdx = np.random.permutation(matrixLegendDf["Task"].size)
