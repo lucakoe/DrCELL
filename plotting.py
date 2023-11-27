@@ -36,7 +36,7 @@ def generate_diagnostic_plots(umap_object, data):
 def plot_bokeh(data_frames, datas, spike_plot_images_path, dump_files_paths, titles=None, bokeh_show=True,
                start_dropdown_data_option="all", output_file_path="./data/output/", data_variables=None,
                display_hover_variables=None, debug=False, experimental=False, hover_image_generation_function=None,
-               color_palette=Muted9):
+               color_palette=Muted9, image_server_port=8000):
     if display_hover_variables is None:
         display_hover_variables = []
     display_hover_variables.insert(0, "Cluster")
@@ -44,6 +44,8 @@ def plot_bokeh(data_frames, datas, spike_plot_images_path, dump_files_paths, tit
         data_variables = []
     if titles is None:
         titles = ["all"]
+    elif not ("all" in titles):
+        titles.insert(0, "all")
     print("Loading Bokeh Plotting Interface")
     images_path = spike_plot_images_path
 
@@ -54,17 +56,6 @@ def plot_bokeh(data_frames, datas, spike_plot_images_path, dump_files_paths, tit
         data_frames[title]['alpha'] = 1.0
         data_frames[title]['ColorMappingCategory'] = 1.0
         data_frames[title]['Cluster'] = -1
-        image = Image.new('RGB', (10, 10), color='black')
-        # Create an in-memory BytesIO buffer
-        buf = io.BytesIO()
-        image.save(buf, format='PNG')
-
-        # image_test=base64.b64encode(buf.getvalue())
-        # print(image_test)
-        data_frames[title]['image'] = base64.b64encode(buf.getvalue())
-        # image_test=base64.b64decode(image_test)
-        # image_test = Image.open(io.BytesIO(image_test))
-        # image_test.show()
 
     datasource_df = pd.DataFrame.copy(data_frames[start_dropdown_data_option])
     update_cluster_toggle_df = pd.DataFrame.copy(datasource_df)
@@ -96,7 +87,6 @@ def plot_bokeh(data_frames, datas, spike_plot_images_path, dump_files_paths, tit
     grid_datasource_df['alpha'] = 0.1
     grid_datasource_df['gridSizeX'] = gridSizeX
     grid_datasource_df['gridSizeY'] = gridSizeY
-    grid_datasource_df['image'] = base64.b64encode(buf.getvalue())
     # grid_datasource_df = util.assign_points_to_grid(datasource_df, grid_datasource_df)
     grid_datasource = ColumnDataSource(grid_datasource_df)
 
@@ -135,16 +125,12 @@ def plot_bokeh(data_frames, datas, spike_plot_images_path, dump_files_paths, tit
 
         <div>
             <img
-                src="file://{images_path}""" + """/image_@{index}.png" height="100" alt="Image"
+                src="http://localhost:""" + str(image_server_port) + """/?image=""" + """image_@{index}.png" height="100" alt="Image"
                 style="float: left; margin: 0px 15px 15px 0px;"
-                border="2"
+                border="1"
             />
         </div>
         
-        <div>
-        <img src="data:image/png;base64, @{image}" style="float: left; margin: 0px 15px 15px 0px; width: 100px; height: auto;">
-
-        </div>
         
     """, renderers=[scatter_plot])
     # TODO finish grid hover tool
@@ -196,7 +182,7 @@ def plot_bokeh(data_frames, datas, spike_plot_images_path, dump_files_paths, tit
     and_filter_multi_choice = MultiChoice(title="'AND' Filter:", value=[], options=options_filter_multi_choice,
                                           width=200)
     export_data_button = Button(label="Export Data")
-    export_only_selection_toggle = Checkbox(label="Export only selection", active=True)
+    export_only_selection_toggle = Checkbox(label="Export only selection (experimental)", active=True)
     options_export_sort_category = datasource_df.columns.tolist()
     select_export_sort_category = Select(title="Sort export by", value="Cluster", options=options_export_sort_category)
 
@@ -220,6 +206,18 @@ def plot_bokeh(data_frames, datas, spike_plot_images_path, dump_files_paths, tit
 
     hover_tool_layout = column(grid_title_div, blank_div, enable_grid_checkbox, grid_size_x_text_input,
                                grid_size_y_text_input, grid_size_button, stats_layout)
+
+    # PCA Preprocessing
+
+    pca_preprocessing_title_div = Div(text="<h3>PCA Preprocessing: </h3>", width=400, height=20)
+
+    enable_pca_checkbox = Checkbox(label="Enable PCA Preprocessing", active=False)
+    select_pca_dimensions_slider = Slider(title="PCA dimensions", start=1,
+                                          end=datas[start_dropdown_data_option].shape[1], step=1,
+                                          value=2,
+                                          disabled=True)
+    pca_preprocessing_layout = column(pca_preprocessing_title_div, blank_div, enable_pca_checkbox,
+                                      select_pca_dimensions_slider)
 
     # UMAP
     umap_title_div = Div(text="<h3>UMAP Parameters: </h3>", width=400, height=20)
@@ -275,7 +273,8 @@ def plot_bokeh(data_frames, datas, spike_plot_images_path, dump_files_paths, tit
 
     main_layout_title_div = Div(text="<h2>Cluster Exploration and Labeling Library: </h2>", width=800, height=20)
 
-    main_layout_row = row(general_layout, column(umap_layout, cluster_selection_layout), cluster_parameters_layout)
+    main_layout_row = row(general_layout, column(pca_preprocessing_layout, umap_layout, cluster_selection_layout),
+                          cluster_parameters_layout)
     main_layout = column(main_layout_title_div, blank_div,
                          main_layout_row,
                          row(plot_figure, hover_tool_layout))
@@ -299,10 +298,22 @@ def plot_bokeh(data_frames, datas, spike_plot_images_path, dump_files_paths, tit
         datasource_df.update(update_cluster_toggle_df["Cluster"])
         if debug: print(datasource_df[datasource_df["Task"] == "1"])
         # datasource_df.reset_index(inplace=True)
+        current_data = datas[select_data.value]
+        if enable_pca_checkbox.active:
+            select_pca_dimensions_slider.disabled = False
+            umap_result = util.get_umap_out(current_data,
+                                            os.path.abspath(dump_files_paths[select_data.value]).replace("\\", '/'),
+                                            n_neighbors=n_neighbors, min_dist=round(min_dist, 2),
+                                            pca_n_components=int(select_pca_dimensions_slider.value), pca_preprocessing=True)
+        else:
+            select_pca_dimensions_slider.disabled = True
+            umap_result = util.get_umap_out(current_data,
+                                            os.path.abspath(dump_files_paths[select_data.value]).replace("\\", '/'),
+                                            n_neighbors=n_neighbors, min_dist=round(min_dist, 2))
 
-        umap_result = util.get_umap_out(datas[select_data.value],
-                                        os.path.abspath(dump_files_paths[select_data.value]).replace("\\", '/'),
-                                        n_neighbors=n_neighbors, min_dist=round(min_dist, 2))
+        # TODO implement pca in get umap out to buffer those variations aswell
+
+
         datasource_df['x'], datasource_df['y'] = umap_result[:, 0], umap_result[:, 1]
         # datasource.data.update({'x': umap_result[:, 0], 'y': umap_result[:, 1]})
         if len(or_filter_multi_choice.value) != 0:
@@ -482,7 +493,6 @@ def plot_bokeh(data_frames, datas, spike_plot_images_path, dump_files_paths, tit
             grid_datasource_df['gridSizeX'] = grid_size_x
             grid_datasource_df['gridSizeY'] = grid_size_y
             grid_datasource_df['alpha'] = 0.1
-            grid_datasource_df['image'] = base64.b64encode(buf.getvalue())
             grid_datasource_df = util.assign_points_to_grid(datasource_df, grid_datasource_df,
                                                             [('index', 'pointIndices'), ("Neuron", "pointNeurons")])
 
@@ -544,36 +554,44 @@ def plot_bokeh(data_frames, datas, spike_plot_images_path, dump_files_paths, tit
             selected_index = selected_data['index'][new_index[0]]
             print(f"Hovered over data point at x={selected_x}, y={selected_y}, index={selected_index}")
 
-    # Attach the callback function to slider changes
+    # Attach the callback function to Interface widgets
+
+    # General
+    select_data.on_change('value', update_umap)
+    select_color.on_change('value', update_category)
+    randomize_colors_button.on_click(update_category_button)
+    or_filter_multi_choice.on_change('value', update_umap)
+    and_filter_multi_choice.on_change('value', update_umap)
+    export_data_button.on_click(export_data)
+
+    # PCA Preprocessing
+
+    enable_pca_checkbox.on_change('active', update_umap)
+    select_pca_dimensions_slider.on_change('value_throttled', update_umap)
+
+    # UMAP
     n_neighbors_slider.on_change('value_throttled', update_umap)
     min_dist_slider.on_change('value_throttled', update_umap)
+
+    # Cluster Selection
+    highlight_cluster_checkbox.on_change('active', update_current_cluster)
+    selected_cluster_text_input.on_change('value', update_current_cluster)
+    select_cluster_slider.on_change('value_throttled', update_current_cluster)
+
+    # Cluster Parameters
+    update_clusters_toggle.on_change("active", update_cluster_toggle_function)
+    min_cluster_size_slider.on_change('value_throttled', update_umap)
     min_samples_slider.on_change('value_throttled', update_umap)
     cluster_selection_epsilon_slider.on_change('value_throttled', update_umap)
-    select_cluster_slider.on_change('value_throttled', update_current_cluster)
-    min_cluster_size_slider.on_change('value_throttled', update_umap)
-    # Attach the callback function to the dropdown menu
-    select_data.on_change('value', update_umap)
-    select_metric.on_change('value', update_umap)
-    select_color.on_change('value', update_category)
-    selected_cluster_text_input.on_change('value', update_current_cluster)
-    grid_size_button.on_click(update_grid_button)
-    export_data_button.on_click(export_data)
-    randomize_colors_button.on_click(update_category_button)
-    enable_grid_checkbox.on_change('active', update_grid)
-
-    # Attach the callback function to the CheckboxGroup's active property
-    cluster_selection_method_toggle.on_change("active", update_umap)
     allow_single_linkage_toggle.on_change("active", update_umap)
     approximate_minimum_spanning_tree_toggle.on_change("active", update_umap)
-    update_clusters_toggle.on_change("active", update_cluster_toggle_function)
-    # Attach the callback function to the MultiChoice's "value" property
-    and_filter_multi_choice.on_change('value', update_umap)
-    or_filter_multi_choice.on_change('value', update_umap)
-    # Attach the callback to the checkbox
-    highlight_cluster_checkbox.on_change('active', update_current_cluster)
+    select_metric.on_change('value', update_umap)
+    cluster_selection_method_toggle.on_change("active", update_umap)
 
+    # Hover Tool and Grid selection
+    enable_grid_checkbox.on_change('active', update_grid)
+    grid_size_button.on_click(update_grid_button)
     grid_datasource.selected.on_change('indices', hover_callback)
-
     plot_figure.on_event(Tap, on_point_click)
 
     # Create a layout for the sliders and plot

@@ -21,7 +21,7 @@ color_palette = Paired12
 # variables from the input data, that is selectable in the Color and Filter setting
 data_variables = ["Task", "IsChoiceSelect", "IsStimSelect", "RedNeurons"]
 # variables from the input data, that gets displayed in the hover tool
-display_hover_variables = ["OwnIndex", "Neuron", "ChoiceAUCs", "StimAUCs"]
+display_hover_variables = ["pdIndex", "Neuron", "ChoiceAUCs", "StimAUCs"]
 
 project_path = r"C:\Users\koenig\OneDrive - Students RWTH Aachen University\Bachelorarbeit\GitHub\twoP\Playground\Luca\PlaygoundProject"
 data_path = os.path.join(project_path, "data")
