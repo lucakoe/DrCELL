@@ -7,6 +7,8 @@ import numpy as np
 import umap
 import matplotlib.pyplot as plt
 
+import plotting
+
 umapOutDumpData = {}
 
 
@@ -28,9 +30,7 @@ def print_mat_file(file_path):
 def get_umap_out(data, dump_path, n_neighbors=20,
                  min_dist=0.0,
                  n_components=2,
-                 random_state=42, pca_preprocessing=False, pca_n_components=2):
-    pca_diagnostic_plot = False
-
+                 random_state=42, pca_preprocessing=False, pca_n_components=2, show_pca_diagnostic_plot=False):
     if pca_preprocessing:
         param_key = (n_neighbors, min_dist, n_components, random_state, pca_n_components)
     else:
@@ -62,32 +62,11 @@ def get_umap_out(data, dump_path, n_neighbors=20,
             pca = pca_operator.fit_transform(current_data)
 
             current_data = pca
-            diagnostic_data = pca_operator.explained_variance_ratio_
-            if pca_diagnostic_plot:
-                print(pca)
-                print(diagnostic_data)
 
-                # Create a figure and axis
-                fig, ax = plt.subplots()
-
-                # Plot the bar graph
-                ax.bar(np.arange(len(diagnostic_data)), diagnostic_data, label='Individual Values', color='blue',
-                       alpha=0.7)
-
-                # Plot the cumulative line
-                cumulative_values = np.cumsum(diagnostic_data)
-                ax.plot(np.arange(len(diagnostic_data)), cumulative_values, label='Cumulative Values', color='red',
-                        linestyle='--',
-                        marker='o')
-
-                # Add labels and title
-                ax.set_xlabel('Components')
-                ax.set_ylabel('Correlation')
-                ax.set_title('Bar Graph with Cumulative Line')
-                ax.legend()
-
-                # Show the plot
-                plt.show()
+            if show_pca_diagnostic_plot:
+                diagnostic_data = pca_operator.explained_variance_ratio_
+                diagnostic_plot = plotting.return_pca_diagnostic_plot(diagnostic_data)
+                diagnostic_plot.show()
 
         else:
             print(

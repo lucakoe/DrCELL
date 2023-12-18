@@ -6,6 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 import scipy
+import sklearn.decomposition  # PCA
 import umap.plot
 from PIL import Image
 from bokeh.events import Tap
@@ -212,12 +213,13 @@ def plot_bokeh(data_frames, datas, spike_plot_images_path, dump_files_paths, tit
     pca_preprocessing_title_div = Div(text="<h3>PCA Preprocessing: </h3>", width=400, height=20)
 
     enable_pca_checkbox = Checkbox(label="Enable PCA Preprocessing", active=False)
-    select_pca_dimensions_slider = Slider(title="PCA dimensions", start=1,
+    select_pca_dimensions_slider = Slider(title="PCA n_components", start=1,
                                           end=datas[start_dropdown_data_option].shape[1], step=1,
                                           value=2,
                                           disabled=True)
+    pca_diagnostic_plot_button = Button(label="PCA Diagnostic Plot")
     pca_preprocessing_layout = column(pca_preprocessing_title_div, blank_div, enable_pca_checkbox,
-                                      select_pca_dimensions_slider)
+                                      select_pca_dimensions_slider, pca_diagnostic_plot_button)
 
     # UMAP
     umap_title_div = Div(text="<h3>UMAP Parameters: </h3>", width=400, height=20)
@@ -301,18 +303,18 @@ def plot_bokeh(data_frames, datas, spike_plot_images_path, dump_files_paths, tit
         current_data = datas[select_data.value]
         if enable_pca_checkbox.active:
             select_pca_dimensions_slider.disabled = False
+            pca_diagnostic_plot_button.disabled = False
             umap_result = util.get_umap_out(current_data,
                                             os.path.abspath(dump_files_paths[select_data.value]).replace("\\", '/'),
                                             n_neighbors=n_neighbors, min_dist=round(min_dist, 2),
-                                            pca_n_components=int(select_pca_dimensions_slider.value), pca_preprocessing=True)
+                                            pca_n_components=int(select_pca_dimensions_slider.value),
+                                            pca_preprocessing=True)
         else:
             select_pca_dimensions_slider.disabled = True
+            pca_diagnostic_plot_button.disabled = True
             umap_result = util.get_umap_out(current_data,
                                             os.path.abspath(dump_files_paths[select_data.value]).replace("\\", '/'),
                                             n_neighbors=n_neighbors, min_dist=round(min_dist, 2))
-
-        # TODO implement pca in get umap out to buffer those variations aswell
-
 
         datasource_df['x'], datasource_df['y'] = umap_result[:, 0], umap_result[:, 1]
         # datasource.data.update({'x': umap_result[:, 0], 'y': umap_result[:, 1]})
@@ -554,6 +556,12 @@ def plot_bokeh(data_frames, datas, spike_plot_images_path, dump_files_paths, tit
             selected_index = selected_data['index'][new_index[0]]
             print(f"Hovered over data point at x={selected_x}, y={selected_y}, index={selected_index}")
 
+    def pca_diagnostic_plot_button_callback():
+        pca_operator = sklearn.decomposition.PCA(n_components=int(select_pca_dimensions_slider.value))
+        pca = pca_operator.fit_transform(datas[select_data.value])
+        diagnostic_data = pca_operator.explained_variance_ratio_
+        return_pca_diagnostic_plot(diagnostic_data).show()
+
     # Attach the callback function to Interface widgets
 
     # General
@@ -568,6 +576,7 @@ def plot_bokeh(data_frames, datas, spike_plot_images_path, dump_files_paths, tit
 
     enable_pca_checkbox.on_change('active', update_umap)
     select_pca_dimensions_slider.on_change('value_throttled', update_umap)
+    pca_diagnostic_plot_button.on_click(pca_diagnostic_plot_button_callback)
 
     # UMAP
     n_neighbors_slider.on_change('value_throttled', update_umap)
@@ -659,3 +668,26 @@ def plot_and_save_spikes(neuron_number, dataframe, output_folder, fps=30, number
 
     print(f"Saved image {neuron_number} to {file_path}")
     plt.close()
+
+
+def return_pca_diagnostic_plot(diagnostic_data):
+    # Create a figure and axis
+    fig, ax = plt.subplots()
+
+    # Plot the bar graph
+    ax.bar(np.arange(len(diagnostic_data)), diagnostic_data, label='Individual Values', color='blue',
+           alpha=0.7)
+
+    # Plot the cumulative line
+    cumulative_values = np.cumsum(diagnostic_data)
+    ax.plot(np.arange(len(diagnostic_data)), cumulative_values, label='Cumulative Values', color='red',
+            linestyle='--',
+            marker='o')
+
+    # Add labels and title
+    ax.set_xlabel('Components')
+    ax.set_ylabel('Correlation')
+    ax.set_title('PCA Diagnostic Plot')
+    ax.legend()
+
+    return plt

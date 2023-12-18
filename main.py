@@ -23,7 +23,7 @@ data_variables = ["Task", "IsChoiceSelect", "IsStimSelect", "RedNeurons"]
 # variables from the input data, that gets displayed in the hover tool
 display_hover_variables = ["pdIndex", "Neuron", "ChoiceAUCs", "StimAUCs"]
 
-project_path = r"C:\Users\koenig\OneDrive - Students RWTH Aachen University\Bachelorarbeit\GitHub\twoP\Playground\Luca\PlaygoundProject"
+project_path = r"C:\Users\koenig\OneDrive - Students RWTH Aachen University\Bachelorarbeit\GitHub\CELL"
 data_path = os.path.join(project_path, "data")
 # it's important to use different names for different datasets!
 # otherwise already buffered data from older datasets gets mixed with the new dataset!
@@ -126,10 +126,14 @@ for title in titles:
                                0.70, 0.71, 0.72, 0.73, 0.74, 0.75, 0.76, 0.77, 0.78, 0.79, 0.80, 0.81, 0.82, 0.83,
                                0.84, 0.85, 0.86, 0.87, 0.88, 0.89, 0.90, 0.91, 0.92, 0.93, 0.94, 0.95, 0.96, 0.97,
                                0.98, 0.99, 1.00]
+            pca_n_components = range(2, cleaned_datas[title].shape[1])
 
         else:
             n_neighbors_values = range(10, 21, 1)
             min_dist_values = [0.0, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.10]
+            # TODO add pca_n_component range
+            pca_n_components = []
+
         n_components_values = [2]
         for n_neighbors_value in n_neighbors_values:
             for min_dist_value in min_dist_values:
@@ -138,7 +142,15 @@ for title in titles:
                                       os.path.abspath(dump_files_paths[title]),
                                       n_neighbors=n_neighbors_value,
                                       min_dist=min_dist_value, n_components=n_components_value)
-
+                    if n_components_value > 3:
+                        for pca_n_components_value in pca_n_components:
+                            util.get_umap_out(cleaned_datas[title],
+                                              os.path.abspath(os.path.abspath(dump_files_paths[title])).replace("\\",
+                                                                                                                '/'),
+                                              n_neighbors=n_neighbors_value, min_dist=round(min_dist_value, 2),
+                                              n_components=n_components_value,
+                                              pca_n_components=int(pca_n_components_value),
+                                              pca_preprocessing=True)
     # gets the UMAP Output file. This function is used to buffer already created UMAPs and improve performance
     if debug: print(os.path.abspath(dump_files_paths[title]))
     temp_umap_out = util.get_umap_out(cleaned_datas[title],
