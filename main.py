@@ -23,7 +23,7 @@ data_variables = ["Task", "IsChoiceSelect", "IsStimSelect", "RedNeurons"]
 # variables from the input data, that gets displayed in the hover tool
 display_hover_variables = ["pdIndex", "Neuron", "ChoiceAUCs", "StimAUCs"]
 
-project_path = r"C:\Users\koenig\OneDrive - Students RWTH Aachen University\Bachelorarbeit\GitHub\CELL"
+project_path = r"C:\Users\Luca Koenig\OneDrive - Students RWTH Aachen University\Bachelorarbeit\GitHub\CELL"
 data_path = os.path.join(project_path, "data")
 # it's important to use different names for different datasets!
 # otherwise already buffered data from older datasets gets mixed with the new dataset!
@@ -118,39 +118,18 @@ for title in titles:
     if generate_umap_parameters:
         if experimental:
             n_neighbors_values = range(2, 51, 1)
-            min_dist_values = [0.00, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.10, 0.11, 0.12, 0.13,
-                               0.14, 0.15, 0.16, 0.17, 0.18, 0.19, 0.20, 0.21, 0.22, 0.23, 0.24, 0.25, 0.26, 0.27,
-                               0.28, 0.29, 0.30, 0.31, 0.32, 0.33, 0.34, 0.35, 0.36, 0.37, 0.38, 0.39, 0.40, 0.41,
-                               0.42, 0.43, 0.44, 0.45, 0.46, 0.47, 0.48, 0.49, 0.50, 0.51, 0.52, 0.53, 0.54, 0.55,
-                               0.56, 0.57, 0.58, 0.59, 0.60, 0.61, 0.62, 0.63, 0.64, 0.65, 0.66, 0.67, 0.68, 0.69,
-                               0.70, 0.71, 0.72, 0.73, 0.74, 0.75, 0.76, 0.77, 0.78, 0.79, 0.80, 0.81, 0.82, 0.83,
-                               0.84, 0.85, 0.86, 0.87, 0.88, 0.89, 0.90, 0.91, 0.92, 0.93, 0.94, 0.95, 0.96, 0.97,
-                               0.98, 0.99, 1.00]
+            min_dist_values = np.arange(0.0, 1.01, 0.01).tolist()
+            min_dist_values=[round(x, 2) for x in min_dist_values]
             pca_n_components = range(2, cleaned_datas[title].shape[1])
 
         else:
             n_neighbors_values = range(10, 21, 1)
-            min_dist_values = [0.0, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.10]
+            min_dist_values = np.arange(0.0, 0.11, 0.01).tolist()
+            min_dist_values = [round(x, 2) for x in min_dist_values]
             # TODO add pca_n_component range
             pca_n_components = []
 
-        n_components_values = [2]
-        for n_neighbors_value in n_neighbors_values:
-            for min_dist_value in min_dist_values:
-                for n_components_value in n_components_values:
-                    util.get_umap_out(cleaned_datas[title],
-                                      os.path.abspath(dump_files_paths[title]),
-                                      n_neighbors=n_neighbors_value,
-                                      min_dist=min_dist_value, n_components=n_components_value)
-                    if n_components_value > 3:
-                        for pca_n_components_value in pca_n_components:
-                            util.get_umap_out(cleaned_datas[title],
-                                              os.path.abspath(os.path.abspath(dump_files_paths[title])).replace("\\",
-                                                                                                                '/'),
-                                              n_neighbors=n_neighbors_value, min_dist=round(min_dist_value, 2),
-                                              n_components=n_components_value,
-                                              pca_n_components=int(pca_n_components_value),
-                                              pca_preprocessing=True)
+        util.generate_umap_parameters(cleaned_datas[title],dump_files_paths[title],n_neighbors_values,min_dist_values,pca_n_components)
     # gets the UMAP Output file. This function is used to buffer already created UMAPs and improve performance
     if debug: print(os.path.abspath(dump_files_paths[title]))
     temp_umap_out = util.get_umap_out(cleaned_datas[title],

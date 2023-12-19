@@ -27,6 +27,18 @@ def print_mat_file(file_path):
         print(f"Error: {e}")
 
 
+def get_phate_out(data, dump_path, n_neighbors=20,
+                 min_dist=0.0,
+                 n_components=2,
+                 random_state=42, pca_preprocessing=False, pca_n_components=2, show_pca_diagnostic_plot=False):
+    return
+def get_t_sne_out(data, dump_path, n_neighbors=20,
+                 min_dist=0.0,
+                 n_components=2,
+                 random_state=42, pca_preprocessing=False, pca_n_components=2, show_pca_diagnostic_plot=False):
+    return
+
+
 def get_umap_out(data, dump_path, n_neighbors=20,
                  min_dist=0.0,
                  n_components=2,
@@ -255,3 +267,24 @@ def assign_points_to_grid(points_df, grid_df, new_column_grid_df_name_and_proper
                 grid_df.at[index, name_and_property[1]] = points_in_grid[name_and_property[0]]
 
     return grid_df
+
+
+def generate_umap_parameters(data,dump_files_path, n_neighbors_values,min_dist_values,pca_n_components,n_components_values = [2]):
+
+    for n_neighbors_value in n_neighbors_values:
+        for min_dist_value in min_dist_values:
+            for n_components_value in n_components_values:
+                get_umap_out(data,
+                                  os.path.abspath(dump_files_path),
+                                  n_neighbors=n_neighbors_value,
+                                  min_dist=min_dist_value, n_components=n_components_value)
+                if n_components_value > 3:
+                    for pca_n_components_value in pca_n_components:
+                        get_umap_out(data,
+                                          os.path.abspath(os.path.abspath(dump_files_path)).replace("\\",
+                                                                                                            '/'),
+                                          n_neighbors=n_neighbors_value, min_dist=round(min_dist_value, 2),
+                                          n_components=n_components_value,
+                                          pca_n_components=int(pca_n_components_value),
+                                          pca_preprocessing=True)
+

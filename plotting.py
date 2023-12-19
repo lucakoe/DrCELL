@@ -194,7 +194,7 @@ def plot_bokeh(data_frames, datas, spike_plot_images_path, dump_files_paths, tit
 
     # Stats
     stats_title_div = Div(text="<h3>Statistics: </h3>", width=400, height=20)
-    stats_div = Div(text="<h2>stat init</h2>", width=400, height=20)
+    stats_div = Div(text="<h2>stat init</h2>", width=400, height=100)
     stats_layout = column(stats_title_div, blank_div, stats_div)
 
     # Hover Tool and Grid selection
@@ -206,7 +206,7 @@ def plot_bokeh(data_frames, datas, spike_plot_images_path, dump_files_paths, tit
     grid_size_button = Button(label="Update")
 
     hover_tool_layout = column(grid_title_div, blank_div, enable_grid_checkbox, grid_size_x_text_input,
-                               grid_size_y_text_input, grid_size_button, stats_layout)
+                               grid_size_y_text_input, grid_size_button)
 
     # PCA Preprocessing
 
@@ -231,7 +231,26 @@ def plot_bokeh(data_frames, datas, spike_plot_images_path, dump_files_paths, tit
         n_neighbors_slider = Slider(title="n_neighbors", start=10, end=20, step=1, value=20)
         min_dist_slider = Slider(title="min_dist", start=0.00, end=0.10, step=0.01, value=0.0)
 
-    umap_layout = column(umap_title_div, blank_div, n_neighbors_slider, min_dist_slider)
+    umap_layout = column(n_neighbors_slider, min_dist_slider)
+
+    # t-SNE
+    t_sne_title_div = Div(text="<h3>t-SNE parameters placeholder </h3>", width=400, height=20)
+    t_sne_layout = column(t_sne_title_div)
+
+    # Phase
+    phate_title_div = Div(text="<h3>PHATE parameters placeholder </h3>", width=400, height=20)
+    phate_layout = column(phate_title_div)
+
+    # Dimensional Reduction
+    dimensional_reduction_title_div = Div(text="<h3>Dimensional Reduction Parameters: </h3>", width=400, height=20)
+    buffer_parameters_button= Button(label="Buffer Dimensional Reduction in Parameter Range")
+    buffer_parameters_status= row(Div(text="Buffering in Process (this may take some time)"))
+    buffer_parameters_status.visible=False
+    options_select_dimensional_reduction = ["None", "UMAP", "t-SNE", "PHATE"]
+    select_dimensional_reduction = Select(value="UMAP", options=options_select_dimensional_reduction)
+    dimensional_reduction_parameter_layouts = column(umap_layout, t_sne_layout, phate_layout)
+    dimensional_reduction_layout = column( dimensional_reduction_title_div,blank_div,select_dimensional_reduction,buffer_parameters_button,buffer_parameters_status,
+                                          dimensional_reduction_parameter_layouts)
 
     # Cluster Parameters
 
@@ -265,7 +284,7 @@ def plot_bokeh(data_frames, datas, spike_plot_images_path, dump_files_paths, tit
 
     highlight_cluster_checkbox = Checkbox(label="Highlight Cluster", active=False)
     selected_cluster_text_input = TextInput(value="0", title="Cluster:", disabled=True)
-    select_cluster_slider = Slider(title="cluster", start=-1,
+    select_cluster_slider = Slider(title="Cluster", start=-1,
                                    end=len(np.unique(data_frames[start_dropdown_data_option]['Cluster'])), step=1,
                                    value=0,
                                    disabled=True)
@@ -275,11 +294,12 @@ def plot_bokeh(data_frames, datas, spike_plot_images_path, dump_files_paths, tit
 
     main_layout_title_div = Div(text="<h2>Cluster Exploration and Labeling Library: </h2>", width=800, height=20)
 
-    main_layout_row = row(general_layout, column(pca_preprocessing_layout, umap_layout, cluster_selection_layout),
+    main_layout_row = row(general_layout,
+                          column(pca_preprocessing_layout, dimensional_reduction_layout),
                           cluster_parameters_layout)
     main_layout = column(main_layout_title_div, blank_div,
                          main_layout_row,
-                         row(plot_figure, hover_tool_layout))
+                         row(plot_figure, column(stats_layout, cluster_selection_layout, hover_tool_layout)))
 
     current_cluster = 0
 
@@ -288,9 +308,38 @@ def plot_bokeh(data_frames, datas, spike_plot_images_path, dump_files_paths, tit
         n_neighbors = n_neighbors_slider.value
         min_dist = min_dist_slider.value
         nonlocal datasource_df, update_cluster_toggle_df, current_cluster
+
+        if select_dimensional_reduction.value == 'UMAP':
+            phate_layout.visible = False
+            t_sne_layout.visible = False
+            umap_layout.visible = True
+
+        elif select_dimensional_reduction.value == 't-SNE':
+            phate_layout.visible = False
+            umap_layout.visible = False
+            t_sne_layout.visible = True
+
+        elif select_dimensional_reduction.value == 'PHATE':
+            umap_layout.visible = False
+            t_sne_layout.visible = False
+            phate_layout.visible = True
+
+        else:
+            #TODO make it so if None or a invalid value is selected, the pca is automatically enabled, the dimension and disable button is disabled and the dimension is set to 2
+            umap_layout.visible = False
+            t_sne_layout.visible = False
+            phate_layout.visible = False
+            if not enable_pca_checkbox.active:
+                enable_pca_checkbox.active=True
+
+                pca_diagnostic_plot_button.disabled = False
+            select_pca_dimensions_slider.value = 2
+            select_pca_dimensions_slider.disabled = True
+
         # Resets to initial state
         datasource_df = pd.DataFrame.copy(data_frames[select_data.value])
         # TODO fix Update Cluster
+        # TODO if changing dataset, reset option to activate update cluster checkbox again
         if debug: print(datasource_df)
         if debug: print(update_cluster_toggle_df)
         if debug: print(update_cluster_toggle_df[update_cluster_toggle_df["Task"] == "1"])
@@ -562,6 +611,23 @@ def plot_bokeh(data_frames, datas, spike_plot_images_path, dump_files_paths, tit
         diagnostic_data = pca_operator.explained_variance_ratio_
         return_pca_diagnostic_plot(diagnostic_data).show()
 
+    def buffer_parameters():
+        buffer_parameters_status.visible = True
+        print("Start buffering")
+        if select_dimensional_reduction.value== 'UMAP':
+
+
+
+            n_neighbors_values = range(n_neighbors_slider.start, n_neighbors_slider.end+n_neighbors_slider.step, n_neighbors_slider.step)
+            min_dist_values = np.arange(min_dist_slider.start, min_dist_slider.end+min_dist_slider.step, min_dist_slider.step).tolist()
+            min_dist_values=[round(x, 2) for x in min_dist_values]
+            pca_n_components = range(select_pca_dimensions_slider.start, select_pca_dimensions_slider.end+select_pca_dimensions_slider.step, select_pca_dimensions_slider.step)
+
+            util.generate_umap_parameters(datas[select_data.value],dump_files_paths[select_data.value],n_neighbors_values=n_neighbors_values,min_dist_values=min_dist_values,pca_n_components=pca_n_components)
+        buffer_parameters_status.visible = False
+        print("Finished buffering")
+
+
     # Attach the callback function to Interface widgets
 
     # General
@@ -581,6 +647,10 @@ def plot_bokeh(data_frames, datas, spike_plot_images_path, dump_files_paths, tit
     # UMAP
     n_neighbors_slider.on_change('value_throttled', update_umap)
     min_dist_slider.on_change('value_throttled', update_umap)
+
+    # Dimensional Reduction
+    select_dimensional_reduction.on_change('value', update_umap)
+    buffer_parameters_button.on_click(buffer_parameters)
 
     # Cluster Selection
     highlight_cluster_checkbox.on_change('active', update_current_cluster)
