@@ -34,10 +34,15 @@ def generate_diagnostic_plots(umap_object, data):
     plt.show()
 
 
-def plot_bokeh(data_frames, datas, spike_plot_images_path, dump_files_paths, titles=None, bokeh_show=True,
+def plot_bokeh(data_frames, datas, spike_plot_images_path, dump_files_paths, titles=None, reduction_functions=None,
+               bokeh_show=True,
                start_dropdown_data_option="all", output_file_path="./data/output/", data_variables=None,
                display_hover_variables=None, debug=False, experimental=False, hover_image_generation_function=None,
                color_palette=Muted9, image_server_port=8000):
+    if reduction_functions is None:
+        reduction_functions = {"UMAP": (
+            util.generate_umap, {"n_neighbors": (2, 50, 1, 20), "min_dist": (0.00, 1.0, 0.01, 0.0)}, {}, {},
+            {"n_components": (2), "random_state": (42)})}
     if display_hover_variables is None:
         display_hover_variables = []
     display_hover_variables.insert(0, "Cluster")
@@ -65,7 +70,7 @@ def plot_bokeh(data_frames, datas, spike_plot_images_path, dump_files_paths, tit
 
     # Create the Bokeh figure
     plot_figure = figure(
-        title='UMAP projection of Neurons',
+        title='Graph',
         width=600,
         height=600,
         tools='pan, wheel_zoom, box_zoom,save, reset, help',
@@ -221,35 +226,49 @@ def plot_bokeh(data_frames, datas, spike_plot_images_path, dump_files_paths, tit
     pca_preprocessing_layout = column(pca_preprocessing_title_div, blank_div, enable_pca_checkbox,
                                       select_pca_dimensions_slider, pca_diagnostic_plot_button)
 
-    # UMAP
-    umap_title_div = Div(text="<h3>UMAP Parameters: </h3>", width=400, height=20)
-
-    if experimental:
-        n_neighbors_slider = Slider(title="n_neighbors", start=2, end=50, step=1, value=20)
-        min_dist_slider = Slider(title="min_dist", start=0.00, end=1.0, step=0.01, value=0.0)
-    else:
-        n_neighbors_slider = Slider(title="n_neighbors", start=10, end=20, step=1, value=20)
-        min_dist_slider = Slider(title="min_dist", start=0.00, end=0.10, step=0.01, value=0.0)
-
-    umap_layout = column(n_neighbors_slider, min_dist_slider)
-
-    # t-SNE
-    t_sne_title_div = Div(text="<h3>t-SNE parameters placeholder </h3>", width=400, height=20)
-    t_sne_layout = column(t_sne_title_div)
-
-    # Phase
-    phate_title_div = Div(text="<h3>PHATE parameters placeholder </h3>", width=400, height=20)
-    phate_layout = column(phate_title_div)
-
     # Dimensional Reduction
     dimensional_reduction_title_div = Div(text="<h3>Dimensional Reduction Parameters: </h3>", width=400, height=20)
-    buffer_parameters_button= Button(label="Buffer Dimensional Reduction in Parameter Range")
-    buffer_parameters_status= row(Div(text="Buffering in Process (this may take some time)"))
-    buffer_parameters_status.visible=False
-    options_select_dimensional_reduction = ["None", "UMAP", "t-SNE", "PHATE"]
+    buffer_parameters_button = Button(label="Buffer Dimensional Reduction in Parameter Range")
+    buffer_parameters_status = row(Div(text="Buffering in Process (this may take some time)"))
+    buffer_parameters_status.visible = False
+    options_select_dimensional_reduction = ["None"]
+    options_select_dimensional_reduction.extend(list(reduction_functions.keys()))
     select_dimensional_reduction = Select(value="UMAP", options=options_select_dimensional_reduction)
-    dimensional_reduction_parameter_layouts = column(umap_layout, t_sne_layout, phate_layout)
-    dimensional_reduction_layout = column( dimensional_reduction_title_div,blank_div,select_dimensional_reduction,buffer_parameters_button,buffer_parameters_status,
+    dimensional_reduction_parameter_layouts = column()
+    reduction_functions_layouts = {}
+    reduction_functions_widgets = {}
+    # adds all the parameters from the reduction function as widgets to the interface.
+    # Numeric parameters get added as Sliders, bool as checkboxes, select as Select and Constants get added later on.
+    for reduction_function in reduction_functions.keys():
+        reduction_functions_layouts[reduction_function] = column()
+        reduction_functions_widgets[reduction_function] = {}
+        for numeric_parameter in reduction_functions[reduction_function]["numeric_parameters"].keys():
+            parameter_range = reduction_functions[reduction_function]["numeric_parameters"][numeric_parameter]
+            reduction_functions_widgets[reduction_function][numeric_parameter] = Slider(title=numeric_parameter,
+                                                                                        **parameter_range)
+            reduction_functions_layouts[reduction_function].children.append(
+                reduction_functions_widgets[reduction_function][numeric_parameter])
+
+        for bool_parameter in reduction_functions[reduction_function]["bool_parameters"].keys():
+            reduction_functions_widgets[reduction_function][bool_parameter] = Checkbox(label=bool_parameter, active=
+            reduction_functions[reduction_function]["bool_parameters"][bool_parameter])
+            reduction_functions_layouts[reduction_function].children.append(
+                reduction_functions_widgets[reduction_function][bool_parameter])
+
+        for selection_parameter in reduction_functions[reduction_function]["select_parameters"].keys():
+            selection_parameters_options = \
+                reduction_functions[reduction_function]["select_parameters"][selection_parameter]["options"]
+            selection_parameters_default_option = \
+                reduction_functions[reduction_function]["select_parameters"][selection_parameter]["default_option"]
+            reduction_functions_widgets[reduction_function][selection_parameter] = Select(
+                value=selection_parameters_default_option, options=selection_parameters_options)
+            reduction_functions_layouts[reduction_function].children.append(
+                reduction_functions_widgets[reduction_function][selection_parameter])
+
+        dimensional_reduction_parameter_layouts.children.append(reduction_functions_layouts[reduction_function])
+
+    dimensional_reduction_layout = column(dimensional_reduction_title_div, blank_div, select_dimensional_reduction,
+                                          buffer_parameters_button, buffer_parameters_status,
                                           dimensional_reduction_parameter_layouts)
 
     # Cluster Parameters
@@ -303,38 +322,34 @@ def plot_bokeh(data_frames, datas, spike_plot_images_path, dump_files_paths, tit
 
     current_cluster = 0
 
+    def get_current_dimension_reduction_parameters():
+        out = {}
+        reduction_function = select_dimensional_reduction.value
+        if reduction_function is not 'None':
+            for numeric_parameter in reduction_functions[reduction_function]["numeric_parameters"].keys():
+                value = reduction_functions_widgets[reduction_function][numeric_parameter].value
+                if type(value) == float:
+                    # rounds the value to the same amount of numbers behind the decimal point as the step of the slider.
+                    # this is to prevent weird behavior with floats when buffering values
+                    round(value, len(
+                        str(reduction_functions_widgets[reduction_function][numeric_parameter].step).split('.')[1]))
+                out[numeric_parameter] = value
+
+            for bool_parameter in reduction_functions[reduction_function]["bool_parameters"].keys():
+                out[bool_parameter] = reduction_functions_widgets[reduction_function][bool_parameter].active
+
+            for selection_parameter in reduction_functions[reduction_function]["select_parameters"].keys():
+                out[selection_parameter] = reduction_functions_widgets[reduction_function][selection_parameter].value
+
+            for constant_parameter in reduction_functions[reduction_function]["constant_parameters"].keys():
+                out[constant_parameter] = reduction_functions[reduction_function]["constant_parameters"][
+                    constant_parameter]
+
+        return out
+
     # Callback function to update graph when sliders change
-    def update_umap(attr, old, new):
-        n_neighbors = n_neighbors_slider.value
-        min_dist = min_dist_slider.value
+    def update_graph(attr, old, new):
         nonlocal datasource_df, update_cluster_toggle_df, current_cluster
-
-        if select_dimensional_reduction.value == 'UMAP':
-            phate_layout.visible = False
-            t_sne_layout.visible = False
-            umap_layout.visible = True
-
-        elif select_dimensional_reduction.value == 't-SNE':
-            phate_layout.visible = False
-            umap_layout.visible = False
-            t_sne_layout.visible = True
-
-        elif select_dimensional_reduction.value == 'PHATE':
-            umap_layout.visible = False
-            t_sne_layout.visible = False
-            phate_layout.visible = True
-
-        else:
-            #TODO make it so if None or a invalid value is selected, the pca is automatically enabled, the dimension and disable button is disabled and the dimension is set to 2
-            umap_layout.visible = False
-            t_sne_layout.visible = False
-            phate_layout.visible = False
-            if not enable_pca_checkbox.active:
-                enable_pca_checkbox.active=True
-
-                pca_diagnostic_plot_button.disabled = False
-            select_pca_dimensions_slider.value = 2
-            select_pca_dimensions_slider.disabled = True
 
         # Resets to initial state
         datasource_df = pd.DataFrame.copy(data_frames[select_data.value])
@@ -350,20 +365,28 @@ def plot_bokeh(data_frames, datas, spike_plot_images_path, dump_files_paths, tit
         if debug: print(datasource_df[datasource_df["Task"] == "1"])
         # datasource_df.reset_index(inplace=True)
         current_data = datas[select_data.value]
+        print(get_current_dimension_reduction_parameters())
         if enable_pca_checkbox.active:
             select_pca_dimensions_slider.disabled = False
             pca_diagnostic_plot_button.disabled = False
-            umap_result = util.get_umap_out(current_data,
-                                            os.path.abspath(dump_files_paths[select_data.value]).replace("\\", '/'),
-                                            n_neighbors=n_neighbors, min_dist=round(min_dist, 2),
-                                            pca_n_components=int(select_pca_dimensions_slider.value),
-                                            pca_preprocessing=True)
+            umap_result = util.get_dimensional_reduction_out(select_dimensional_reduction.value, current_data,
+                                                             dump_path=os.path.abspath(
+                                                                 dump_files_paths[select_data.value]).replace("\\",
+                                                                                                              '/'),
+                                                             reduction_functions=reduction_functions,
+                                                             reduction_params=get_current_dimension_reduction_parameters(),
+                                                             pca_preprocessing=True,
+                                                             pca_n_components=int(select_pca_dimensions_slider.value))
         else:
             select_pca_dimensions_slider.disabled = True
             pca_diagnostic_plot_button.disabled = True
-            umap_result = util.get_umap_out(current_data,
-                                            os.path.abspath(dump_files_paths[select_data.value]).replace("\\", '/'),
-                                            n_neighbors=n_neighbors, min_dist=round(min_dist, 2))
+            umap_result = util.get_dimensional_reduction_out(select_dimensional_reduction.value, current_data,
+                                                             dump_path=os.path.abspath(
+                                                                 dump_files_paths[select_data.value]).replace("\\",
+                                                                                                              '/'),
+                                                             reduction_functions=reduction_functions,
+                                                             reduction_params=get_current_dimension_reduction_parameters(),
+                                                             pca_preprocessing=False)
 
         datasource_df['x'], datasource_df['y'] = umap_result[:, 0], umap_result[:, 1]
         # datasource.data.update({'x': umap_result[:, 0], 'y': umap_result[:, 1]})
@@ -421,6 +444,25 @@ def plot_bokeh(data_frames, datas, spike_plot_images_path, dump_files_paths, tit
         update_grid(attr=None, old=None, new=None)
         datasource.data.update(datasource.data)
         update_category(attr=None, old=None, new=None)
+
+    def update_dimensional_reduction(attr, old, new):
+        for reduction_functions_layout_name in list(reduction_functions_layouts.keys()):
+            if select_dimensional_reduction.value == reduction_functions_layout_name:
+                reduction_functions_layouts[reduction_functions_layout_name].visible = True
+            else:
+                reduction_functions_layouts[reduction_functions_layout_name].visible = False
+
+        if select_dimensional_reduction.value is "None":
+            # TODO make it so if None or a invalid value is selected, the pca is automatically enabled, the dimension and disable button is disabled and the dimension is set to 2
+
+            if not enable_pca_checkbox.active:
+                enable_pca_checkbox.active = True
+
+                pca_diagnostic_plot_button.disabled = False
+            select_pca_dimensions_slider.value = 2
+            select_pca_dimensions_slider.disabled = True
+
+        update_graph(attr=None, old=None, new=None)
 
     def update_current_cluster(attr, old, new):
         nonlocal current_cluster
@@ -527,7 +569,7 @@ def plot_bokeh(data_frames, datas, spike_plot_images_path, dump_files_paths, tit
         nonlocal update_cluster_toggle_df, datasource_df
         if update_clusters_toggle.active:
             update_cluster_toggle_df = pd.DataFrame.copy(datasource_df)
-        update_umap(attr=None, old=None, new=None)
+        update_graph(attr=None, old=None, new=None)
 
     def update_grid(attr, old, new):
         global grid_size_y, grid_size_x
@@ -613,44 +655,52 @@ def plot_bokeh(data_frames, datas, spike_plot_images_path, dump_files_paths, tit
 
     def buffer_parameters():
         buffer_parameters_status.visible = True
-        print("Start buffering")
-        if select_dimensional_reduction.value== 'UMAP':
+        print("Start buffering (broken at the moment)")
+        # TODO expend to all dimensional reduction algorithms
+        if select_dimensional_reduction.value == 'UMAP':
+            n_neighbors_values = range(n_neighbors_slider.start, n_neighbors_slider.end + n_neighbors_slider.step,
+                                       n_neighbors_slider.step)
+            min_dist_values = np.arange(min_dist_slider.start, min_dist_slider.end + min_dist_slider.step,
+                                        min_dist_slider.step).tolist()
+            min_dist_values = [round(x, 2) for x in min_dist_values]
+            pca_n_components = range(select_pca_dimensions_slider.start,
+                                     select_pca_dimensions_slider.end + select_pca_dimensions_slider.step,
+                                     select_pca_dimensions_slider.step)
 
-
-
-            n_neighbors_values = range(n_neighbors_slider.start, n_neighbors_slider.end+n_neighbors_slider.step, n_neighbors_slider.step)
-            min_dist_values = np.arange(min_dist_slider.start, min_dist_slider.end+min_dist_slider.step, min_dist_slider.step).tolist()
-            min_dist_values=[round(x, 2) for x in min_dist_values]
-            pca_n_components = range(select_pca_dimensions_slider.start, select_pca_dimensions_slider.end+select_pca_dimensions_slider.step, select_pca_dimensions_slider.step)
-
-            util.generate_umap_parameters(datas[select_data.value],dump_files_paths[select_data.value],n_neighbors_values=n_neighbors_values,min_dist_values=min_dist_values,pca_n_components=pca_n_components)
+            util.generate_umap_parameters(datas[select_data.value], dump_files_paths[select_data.value],
+                                          n_neighbors_values=n_neighbors_values, min_dist_values=min_dist_values,
+                                          pca_n_components=pca_n_components)
         buffer_parameters_status.visible = False
         print("Finished buffering")
-
 
     # Attach the callback function to Interface widgets
 
     # General
-    select_data.on_change('value', update_umap)
+    select_data.on_change('value', update_graph)
     select_color.on_change('value', update_category)
     randomize_colors_button.on_click(update_category_button)
-    or_filter_multi_choice.on_change('value', update_umap)
-    and_filter_multi_choice.on_change('value', update_umap)
+    or_filter_multi_choice.on_change('value', update_graph)
+    and_filter_multi_choice.on_change('value', update_graph)
     export_data_button.on_click(export_data)
 
     # PCA Preprocessing
 
-    enable_pca_checkbox.on_change('active', update_umap)
-    select_pca_dimensions_slider.on_change('value_throttled', update_umap)
+    enable_pca_checkbox.on_change('active', update_graph)
+    select_pca_dimensions_slider.on_change('value_throttled', update_graph)
     pca_diagnostic_plot_button.on_click(pca_diagnostic_plot_button_callback)
 
-    # UMAP
-    n_neighbors_slider.on_change('value_throttled', update_umap)
-    min_dist_slider.on_change('value_throttled', update_umap)
-
     # Dimensional Reduction
-    select_dimensional_reduction.on_change('value', update_umap)
+    select_dimensional_reduction.on_change('value', update_dimensional_reduction)
     buffer_parameters_button.on_click(buffer_parameters)
+    # assign the callback function for every parameter
+    for reduction_function in reduction_functions.keys():
+        for numeric_parameter in reduction_functions[reduction_function]["numeric_parameters"].keys():
+            reduction_functions_widgets[reduction_function][numeric_parameter].on_change('value_throttled',
+                                                                                         update_graph)
+        for bool_parameter in reduction_functions[reduction_function]["bool_parameters"].keys():
+            reduction_functions_widgets[reduction_function][bool_parameter].on_change("active", update_graph)
+        for selection_parameter in reduction_functions[reduction_function]["select_parameters"].keys():
+            reduction_functions_widgets[reduction_function][selection_parameter].on_change('value', update_graph)
 
     # Cluster Selection
     highlight_cluster_checkbox.on_change('active', update_current_cluster)
@@ -659,13 +709,13 @@ def plot_bokeh(data_frames, datas, spike_plot_images_path, dump_files_paths, tit
 
     # Cluster Parameters
     update_clusters_toggle.on_change("active", update_cluster_toggle_function)
-    min_cluster_size_slider.on_change('value_throttled', update_umap)
-    min_samples_slider.on_change('value_throttled', update_umap)
-    cluster_selection_epsilon_slider.on_change('value_throttled', update_umap)
-    allow_single_linkage_toggle.on_change("active", update_umap)
-    approximate_minimum_spanning_tree_toggle.on_change("active", update_umap)
-    select_metric.on_change('value', update_umap)
-    cluster_selection_method_toggle.on_change("active", update_umap)
+    min_cluster_size_slider.on_change('value_throttled', update_graph)
+    min_samples_slider.on_change('value_throttled', update_graph)
+    cluster_selection_epsilon_slider.on_change('value_throttled', update_graph)
+    allow_single_linkage_toggle.on_change("active", update_graph)
+    approximate_minimum_spanning_tree_toggle.on_change("active", update_graph)
+    select_metric.on_change('value', update_graph)
+    cluster_selection_method_toggle.on_change("active", update_graph)
 
     # Hover Tool and Grid selection
     enable_grid_checkbox.on_change('active', update_grid)
@@ -675,7 +725,7 @@ def plot_bokeh(data_frames, datas, spike_plot_images_path, dump_files_paths, tit
 
     # Create a layout for the sliders and plot
     layout = column(main_layout)
-    update_umap(attr=None, old=None, new=None)
+    update_dimensional_reduction(attr=None, old=None, new=None)
 
     if bokeh_show:
         # Show the plot

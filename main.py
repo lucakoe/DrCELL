@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 from bokeh.palettes import Spectral4, Spectral11, Turbo256, Spectral10, Paired12, Muted9
+import util
 
 # skips Spike Plot generation if false and takes dump
 generate_and_save_spike_plots = False
@@ -37,7 +38,48 @@ spike_plot_images_path = os.path.join(input_folder_path, "plot_images")
 # folder for buffered UMAP data of corresponding input file
 dump_files_path = os.path.join(input_folder_path, "dump")
 # takes the input file name as name for dumpfile
-umap_out_param_dump_filename_extension = "_umapOutParamDump.pkl"
+umap_out_param_dump_filename_extension = "_parameter_buffer_dump.pkl"
+
+reduction_functions = {}
+# n_components has to be 2 in custom functions; first parameter has to be data!!!
+reduction_functions["UMAP"] = {"function": util.generate_umap,
+                               "numeric_parameters": {"n_neighbors": {"start": 2, "end": 50, "step": 1, "value": 20},
+                                                      "min_dist": {"start": 0.00, "end": 1.0, "step": 0.01,
+                                                                   "value": 0.0}},
+                               "bool_parameters": {},
+                               "select_parameters": {},
+                               "constant_parameters": {"n_components": (2), "random_state": (42)}}
+reduction_functions["t-SNE"] = {"function": util.generate_t_sne,
+                                "numeric_parameters": {"perplexity": {"start": 5, "end": 50, "step": 1, "value": 30},
+                                                       "learning_rate": {"start": 10, "end": 200, "step": 10,
+                                                                         "value": 200},
+                                                       "n_iter": {"start": 250, "end": 1000, "step": 10, "value": 1000},
+                                                       "early_exaggeration": {"start": 4, "end": 20, "step": 1,
+                                                                              "value": 12},
+                                                       "angle": {"start": 0.2, "end": 0.8, "step": 0.1, "value": 0.5}},
+                                "bool_parameters": {},
+                                "select_parameters": {
+                                    "metric": {"options": ["euclidean", "manhattan", "cosine"],
+                                               "default_option": "euclidean"}},
+                                "constant_parameters": {"n_components": (2)}}
+
+reduction_functions["PHATE"] = {"function": util.generate_phate,
+                                "numeric_parameters": {"knn": {"start": 5, "end": 100, "step": 1, "value": 30},
+                                                       "decay": {"start": 1, "end": 50, "step": 1,
+                                                                 "value": 15},
+                                                       "t": {"start": 5, "end": 100, "step": 1, "value": 5},
+                                                       "gamma": {"start": 0, "end": 10, "step": 0.1,
+                                                                 "value": 0},
+                                                       "n_jobs": {"start": -1, "end": 4, "step": 1, "value": -1},
+                                                       "n_pca": {"start": 5, "end": 100, "step": 1,
+                                                                 "value": 100},
+                                                       "n_landmark": {"start": 50, "end": 1000, "step": 10,
+                                                                      "value": 1000},
+
+                                                       },
+                                "bool_parameters": {"verbose": False},
+                                "select_parameters": {},
+                                "constant_parameters": {"n_components": (2)}}
 
 print(f"Using '{input_file_path}' as input file.")
 # creates a folder for the corresponding input file, where data gets saved
@@ -119,7 +161,7 @@ for title in titles:
         if experimental:
             n_neighbors_values = range(2, 51, 1)
             min_dist_values = np.arange(0.0, 1.01, 0.01).tolist()
-            min_dist_values=[round(x, 2) for x in min_dist_values]
+            min_dist_values = [round(x, 2) for x in min_dist_values]
             pca_n_components = range(2, cleaned_datas[title].shape[1])
 
         else:
@@ -129,13 +171,17 @@ for title in titles:
             # TODO add pca_n_component range
             pca_n_components = []
 
-        util.generate_umap_parameters(cleaned_datas[title],dump_files_paths[title],n_neighbors_values,min_dist_values,pca_n_components)
+        util.generate_umap_parameters(cleaned_datas[title], dump_files_paths[title], n_neighbors_values,
+                                      min_dist_values, pca_n_components)
     # gets the UMAP Output file. This function is used to buffer already created UMAPs and improve performance
     if debug: print(os.path.abspath(dump_files_paths[title]))
-    temp_umap_out = util.get_umap_out(cleaned_datas[title],
-                                      os.path.abspath(dump_files_paths[title]).replace(
-                                          "\\", '/'),
-                                      n_neighbors=20, min_dist=0.0, n_components=2)
+    umap_default_parameters = {"n_neighbors": 20, "min_dist": 0.0, "n_components": 2}
+    temp_umap_out = util.get_dimensional_reduction_out("UMAP", cleaned_datas[title],
+                                                       dump_path=os.path.abspath(dump_files_paths[title]).replace(
+                                                           "\\", '/'),
+                                                       reduction_functions=reduction_functions,
+                                                       reduction_params=umap_default_parameters,
+                                                       pca_preprocessing=False)
 
     if debug: print('Umap vals: ' + str(temp_umap_out.shape))
 
@@ -154,6 +200,7 @@ for title in titles:
 
 # plots UMAP via Bokeh
 plotting.plot_bokeh(cell_dfs, cleaned_datas, spike_plot_images_path, dump_files_paths, titles,
+                    reduction_functions=reduction_functions,
                     bokeh_show=bokeh_show,
                     start_dropdown_data_option=titles[0], data_variables=data_variables,
                     display_hover_variables=display_hover_variables, color_palette=color_palette, debug=debug,

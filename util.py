@@ -6,10 +6,11 @@ import scipy.io as sio
 import numpy as np
 import umap
 import matplotlib.pyplot as plt
+import phate
 
 import plotting
 
-umapOutDumpData = {}
+dimensional_reduction_out_dump_data = {}
 
 
 def print_mat_file(file_path):
@@ -27,18 +28,79 @@ def print_mat_file(file_path):
         print(f"Error: {e}")
 
 
-def get_phate_out(data, dump_path, n_neighbors=20,
-                 min_dist=0.0,
-                 n_components=2,
-                 random_state=42, pca_preprocessing=False, pca_n_components=2, show_pca_diagnostic_plot=False):
-    return
-def get_t_sne_out(data, dump_path, n_neighbors=20,
-                 min_dist=0.0,
-                 n_components=2,
-                 random_state=42, pca_preprocessing=False, pca_n_components=2, show_pca_diagnostic_plot=False):
-    return
+def apply_pca_preprocessing(data, n_components=2, show_diagnostic_plot=False):
+    """
+    Apply PCA preprocessing to the input data.
+
+    Parameters:
+    - data: The input data.
+    - n_components: The number of components for PCA.
+    - show_diagnostic_plot: Whether to show the PCA diagnostic plot.
+
+    Returns:
+    - The PCA preprocessed data.
+    """
+    pca_operator = sklearn.decomposition.PCA(n_components=n_components)
+    pca_data = pca_operator.fit_transform(data)
+
+    if show_diagnostic_plot:
+        diagnostic_data = pca_operator.explained_variance_ratio_
+        diagnostic_plot = plotting.return_pca_diagnostic_plot(diagnostic_data)
+        diagnostic_plot.show()
+
+    return pca_data
 
 
+def get_dimensional_reduction_out(reduction_function_name, data, dump_path, reduction_functions, reduction_params,
+                                  pca_preprocessing=False, pca_n_components=2, show_pca_diagnostic_plot=False):
+    dump_path = os.path.join(os.path.dirname(dump_path), f"{reduction_function_name}_" + os.path.basename(dump_path))
+
+    if pca_preprocessing:
+        param_key = tuple(reduction_params + [pca_n_components])
+    else:
+        param_key = tuple(reduction_params)
+
+    buffered_data_dump = {}
+
+    # Checks if the dump file with this path was already called.
+    # If so, instead of loading it for every call of the function, it takes the data from there
+    if dump_path not in dimensional_reduction_out_dump_data:
+        # Check if the file exists
+        if os.path.exists(dump_path):
+            with open(dump_path, 'rb') as file:
+                dimensional_reduction_out_dump_data[dump_path] = pickle.load(file)
+        else:
+            # If the file doesn't exist, create it and write something to it
+            with open(dump_path, 'wb') as file:
+                pickle.dump(buffered_data_dump, file)
+                dimensional_reduction_out_dump_data[dump_path] = buffered_data_dump
+
+            print(f"The file '{dump_path}' has been created.")
+
+    buffered_data_dump = dimensional_reduction_out_dump_data[dump_path]
+    current_data = data
+
+    if param_key not in buffered_data_dump:
+        if pca_preprocessing:
+            print(
+                f"Generate {reduction_function_name} with PCA preprocessing: File = {os.path.basename(dump_path)}, {reduction_params}, PCA n_components = {pca_n_components}")
+            current_data = apply_pca_preprocessing(current_data, n_components=pca_n_components,
+                                                   show_diagnostic_plot=show_pca_diagnostic_plot)
+
+        print(f"Generate {reduction_function_name}: File = {os.path.basename(dump_path)}, {reduction_params}")
+        reduced_data = reduction_functions[reduction_function_name]["function"](current_data, **reduction_params)
+
+        buffered_data_dump[param_key] = reduced_data
+
+        with open(dump_path, 'wb') as file:
+            dimensional_reduction_out_dump_data[dump_path] = buffered_data_dump
+            pickle.dump(buffered_data_dump, file)
+
+    print(f"Return {reduction_function_name}: File = {os.path.basename(dump_path)}, {reduction_params}")
+    return buffered_data_dump[param_key]
+
+
+# depreciated
 def get_umap_out(data, dump_path, n_neighbors=20,
                  min_dist=0.0,
                  n_components=2,
@@ -51,20 +113,20 @@ def get_umap_out(data, dump_path, n_neighbors=20,
 
     # Checks the global variable if the dumpfile with this path was already called.
     # If so instead of loading it for every call of the function it takes the data from there
-    if not (dump_path in umapOutDumpData):
+    if not (dump_path in dimensional_reduction_out_dump_data):
         # Check if the file exists
         if os.path.exists(dump_path):
             with open(dump_path, 'rb') as file:
-                umapOutDumpData[dump_path] = pickle.load(file)
+                dimensional_reduction_out_dump_data[dump_path] = pickle.load(file)
         else:
             # If the file doesn't exist, create it and write something to it
             with open(dump_path, 'wb') as file:
                 pickle.dump(umap_out_df_dump, file)
-                umapOutDumpData[dump_path] = umap_out_df_dump
+                dimensional_reduction_out_dump_data[dump_path] = umap_out_df_dump
 
             print(f"The file '{dump_path}' has been created.")
 
-    umap_out_df_dump = umapOutDumpData[dump_path]
+    umap_out_df_dump = dimensional_reduction_out_dump_data[dump_path]
     current_data = data
     if not (param_key in umap_out_df_dump):
         if pca_preprocessing:
@@ -93,7 +155,7 @@ def get_umap_out(data, dump_path, n_neighbors=20,
         umap_out_df_dump[param_key] = umap_object.fit_transform(current_data)
 
         with open(dump_path, 'wb') as file:
-            umapOutDumpData[dump_path] = umap_out_df_dump
+            dimensional_reduction_out_dump_data[dump_path] = umap_out_df_dump
             pickle.dump(umap_out_df_dump, file)
     if pca_preprocessing:
         print(
@@ -269,22 +331,48 @@ def assign_points_to_grid(points_df, grid_df, new_column_grid_df_name_and_proper
     return grid_df
 
 
-def generate_umap_parameters(data,dump_files_path, n_neighbors_values,min_dist_values,pca_n_components,n_components_values = [2]):
-
+def generate_umap_parameters(data, dump_files_path, n_neighbors_values, min_dist_values, pca_n_components,
+                             n_components_values=[2]):
     for n_neighbors_value in n_neighbors_values:
         for min_dist_value in min_dist_values:
             for n_components_value in n_components_values:
                 get_umap_out(data,
-                                  os.path.abspath(dump_files_path),
-                                  n_neighbors=n_neighbors_value,
-                                  min_dist=min_dist_value, n_components=n_components_value)
+                             os.path.abspath(dump_files_path),
+                             n_neighbors=n_neighbors_value,
+                             min_dist=min_dist_value, n_components=n_components_value)
                 if n_components_value > 3:
                     for pca_n_components_value in pca_n_components:
                         get_umap_out(data,
-                                          os.path.abspath(os.path.abspath(dump_files_path)).replace("\\",
-                                                                                                            '/'),
-                                          n_neighbors=n_neighbors_value, min_dist=round(min_dist_value, 2),
-                                          n_components=n_components_value,
-                                          pca_n_components=int(pca_n_components_value),
-                                          pca_preprocessing=True)
+                                     os.path.abspath(os.path.abspath(dump_files_path)).replace("\\",
+                                                                                               '/'),
+                                     n_neighbors=n_neighbors_value, min_dist=round(min_dist_value, 2),
+                                     n_components=n_components_value,
+                                     pca_n_components=int(pca_n_components_value),
+                                     pca_preprocessing=True)
 
+
+def generate_umap(data, n_neighbors, min_dist, n_components=2, random_state=42):
+    umap_object = umap.UMAP(
+        n_neighbors=n_neighbors,
+        min_dist=min_dist,
+        n_components=n_components,
+        random_state=random_state,
+    )
+    return umap_object.fit_transform(data)
+
+
+def generate_t_sne(data, perplexity=30, learning_rate=200, n_iter=1000, early_exaggeration=12, angle=0.5,
+                   metric="euclidean", n_components=2):
+    tsne_operator = sklearn.manifold.TSNE(perplexity=perplexity, learning_rate=learning_rate, n_iter=n_iter,
+                                          early_exaggeration=early_exaggeration, angle=angle,
+                                          metric=metric, n_components=n_components)
+    return tsne_operator.fit_transform(data)
+
+
+def generate_phate(data, knn=30, decay=15, t='auto', gamma=0, n_jobs=-1, n_pca=100, n_landmark=1000, verbose=False,
+                   n_components=2):
+    phate_operator = phate.PHATE(n_jobs=n_jobs)
+    phate_operator.set_params(knn=knn, decay=decay, t=t, gamma=gamma, n_jobs=n_jobs, n_pca=n_pca, n_landmark=n_landmark,
+                              verbose=verbose, n_components=n_components)
+
+    return phate_operator.fit_transform(data)

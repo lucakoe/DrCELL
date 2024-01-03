@@ -8,6 +8,7 @@ import startBokehServer
 # Enable PyQt WebEngine
 from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEngineSettings
 
+
 # PyQt window class
 class BokehWindow(QMainWindow):
     def __init__(self):
@@ -16,7 +17,7 @@ class BokehWindow(QMainWindow):
         self.init_ui()
 
     def init_ui(self):
-        self.setWindowTitle('Bokeh Embedded in PyQt')
+        self.setWindowTitle('Cluster Exploration and Labeling Library')
 
         # Start Bokeh server in a separate thread
         bokeh_thread = Thread(target=startBokehServer.run_server)
@@ -40,8 +41,9 @@ class BokehWindow(QMainWindow):
         self.setCentralWidget(container)
 
         # Set window size and show the window
-        self.setGeometry(100, 100, 800, 600)
+        self.setGeometry(100, 100, 1200, 900)
         self.show()
+
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
