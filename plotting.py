@@ -229,8 +229,7 @@ def plot_bokeh(data_frames, datas, spike_plot_images_path, dump_files_paths, tit
     # Dimensional Reduction
     dimensional_reduction_title_div = Div(text="<h3>Dimensional Reduction Parameters: </h3>", width=400, height=20)
     buffer_parameters_button = Button(label="Buffer Dimensional Reduction in Parameter Range")
-    buffer_parameters_status = row(Div(text="Buffering in Process (this may take some time)"))
-    buffer_parameters_status.visible = False
+    buffer_parameters_status = Div(text=" ", width=400, height=20)
     options_select_dimensional_reduction = ["None"]
     options_select_dimensional_reduction.extend(list(reduction_functions.keys()))
     select_dimensional_reduction = Select(value="UMAP", options=options_select_dimensional_reduction)
@@ -331,8 +330,8 @@ def plot_bokeh(data_frames, datas, spike_plot_images_path, dump_files_paths, tit
                 if type(value) == float:
                     # rounds the value to the same amount of numbers behind the decimal point as the step of the slider.
                     # this is to prevent weird behavior with floats when buffering values
-                    round(value, len(
-                        str(reduction_functions_widgets[reduction_function][numeric_parameter].step).split('.')[1]))
+                    round(value, util.get_decimal_places(
+                        reduction_functions_widgets[reduction_function][numeric_parameter].step))
                 out[numeric_parameter] = value
 
             for bool_parameter in reduction_functions[reduction_function]["bool_parameters"].keys():
@@ -654,22 +653,87 @@ def plot_bokeh(data_frames, datas, spike_plot_images_path, dump_files_paths, tit
         return_pca_diagnostic_plot(diagnostic_data).show()
 
     def buffer_parameters():
-        buffer_parameters_status.visible = True
-        print("Start buffering (broken at the moment)")
-        # TODO expend to all dimensional reduction algorithms
-        if select_dimensional_reduction.value == 'UMAP':
-            n_neighbors_values = range(n_neighbors_slider.start, n_neighbors_slider.end + n_neighbors_slider.step,
-                                       n_neighbors_slider.step)
-            min_dist_values = np.arange(min_dist_slider.start, min_dist_slider.end + min_dist_slider.step,
-                                        min_dist_slider.step).tolist()
-            min_dist_values = [round(x, 2) for x in min_dist_values]
-            pca_n_components = range(select_pca_dimensions_slider.start,
-                                     select_pca_dimensions_slider.end + select_pca_dimensions_slider.step,
-                                     select_pca_dimensions_slider.step)
 
-            util.generate_umap_parameters(datas[select_data.value], dump_files_paths[select_data.value],
-                                          n_neighbors_values=n_neighbors_values, min_dist_values=min_dist_values,
-                                          pca_n_components=pca_n_components)
+        def iterate_over_variables(variable_names, variables_values, current_combination=[]):
+            if not variables_values:
+                # Base case: if no more variables, print the current combination
+                # print(current_combination)
+                if enable_pca_checkbox.active:
+                    util.get_dimensional_reduction_out(select_dimensional_reduction.value, datas[select_data.value],
+                                                       dump_path=os.path.abspath(
+                                                           dump_files_paths[select_data.value]).replace("\\",
+                                                                                                        '/'),
+                                                       reduction_functions=reduction_functions,
+                                                       # adds the variable name back to the current combination and makes a dict to be used in the function as parameters
+                                                       reduction_params=dict(zip(variable_names, current_combination)),
+                                                       pca_preprocessing=True,
+                                                       pca_n_components=select_pca_dimensions_slider.value
+                                                       )
+                else:
+                    util.get_dimensional_reduction_out(select_dimensional_reduction.value, datas[select_data.value],
+                                                       dump_path=os.path.abspath(
+                                                           dump_files_paths[select_data.value]).replace("\\",
+                                                                                                        '/'),
+                                                       reduction_functions=reduction_functions,
+                                                       # adds the variable name back to the current combination and makes a dict to be used in the function as parameters
+                                                       reduction_params=dict(zip(variable_names, current_combination)),
+                                                       pca_preprocessing=False)
+                # TODO add buffering for PCA preprocessing
+
+            else:
+                # Recursive case: iterate over the values of the current variable
+                current_variable_values = variables_values[0]
+                for value in current_variable_values:
+                    # Recursively call the function with the next variable and the updated combination
+                    iterate_over_variables(variable_names, variables_values[1:], current_combination + [value])
+
+        nonlocal buffer_parameters_status
+        # TODO fix buffer status
+        buffer_parameters_status.text = "Start buffering"
+        print("Start buffering")
+
+        if select_dimensional_reduction.value != "None":
+            # creates an array with the variable and one with all the possible values in the range
+            variable_names = []
+            variable_values = []
+            reduction_function = select_dimensional_reduction.value
+            for parameter_type in reduction_functions[reduction_function].keys():
+                if parameter_type == "numeric_parameters":
+                    for variable_name in reduction_functions[reduction_function]["numeric_parameters"].keys():
+                        parameter_range = reduction_functions[reduction_function]["numeric_parameters"][
+                            variable_name].copy()
+                        parameter_range.pop('value')
+                        # rename key end to stop
+                        parameter_range["stop"] = parameter_range.pop("end")
+                        # add one step in the end to make last value of slider inclusive
+                        parameter_range["stop"] = parameter_range["stop"] + parameter_range["step"]
+                        values = np.arange(**parameter_range).tolist()
+                        if type(parameter_range["step"]) is float:
+                            # rounds values to decimal place of corresponding step variable, to avoid weird float behaviour
+                            values = [round(x, util.get_decimal_places(parameter_range["step"])) for x in values]
+                        variable_values.append(values)
+                        variable_names.append(variable_name)
+                elif parameter_type == "bool_parameters":
+                    for variable_name in reduction_functions[reduction_function]["bool_parameters"].keys():
+                        variable_values.append([False, True])
+                        variable_names.append(variable_name)
+
+                elif parameter_type == "select_parameters":
+                    for variable_name in reduction_functions[reduction_function]["select_parameters"].keys():
+                        variable_values.append(
+                            reduction_functions[reduction_function]["select_parameters"][variable_name][
+                                "options"].copy())
+                        variable_names.append(variable_name)
+
+                elif parameter_type == "constant_parameters":
+                    for variable_name in reduction_functions[reduction_function]["constant_parameters"].keys():
+                        variable_values.append(
+                            [reduction_functions[reduction_function]["constant_parameters"][variable_name]])
+                        variable_names.append(variable_name)
+
+            # generates all combinations of variable value combinations
+            iterate_over_variables(variable_names, variable_values)
+
         buffer_parameters_status.visible = False
         print("Finished buffering")
 

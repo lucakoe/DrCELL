@@ -7,6 +7,7 @@ import numpy as np
 import umap
 import matplotlib.pyplot as plt
 import phate
+from decimal import Decimal
 
 import plotting
 
@@ -26,6 +27,13 @@ def print_mat_file(file_path):
             print("\n")
     except Exception as e:
         print(f"Error: {e}")
+
+
+def get_decimal_places(number):
+    return len(str(number).split('.')[1])
+
+    decimal_places = Decimal(str(number)).as_tuple().exponent
+    return max(0, -decimal_places)
 
 
 def apply_pca_preprocessing(data, n_components=2, show_diagnostic_plot=False):
@@ -56,9 +64,9 @@ def get_dimensional_reduction_out(reduction_function_name, data, dump_path, redu
     dump_path = os.path.join(os.path.dirname(dump_path), f"{reduction_function_name}_" + os.path.basename(dump_path))
 
     if pca_preprocessing:
-        param_key = tuple(reduction_params + [pca_n_components])
+        param_key = tuple(reduction_params.items()) + (("pca_preprocessing_n_components", pca_n_components),)
     else:
-        param_key = tuple(reduction_params)
+        param_key = tuple(reduction_params.items())
 
     buffered_data_dump = {}
 
