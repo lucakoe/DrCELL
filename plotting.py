@@ -34,7 +34,7 @@ def generate_diagnostic_plots(umap_object, data):
     plt.show()
 
 
-def plot_bokeh(data_frames, datas, spike_plot_images_path, dump_files_paths, titles=None, reduction_functions=None,
+def plot_bokeh(datas, additional_data, spike_plot_images_path, dump_files_paths, titles=None, reduction_functions=None,
                bokeh_show=True,
                start_dropdown_data_option="all", output_file_path="./data/output/", data_variables=None,
                display_hover_variables=None, debug=False, experimental=False, hover_image_generation_function=None,
@@ -55,7 +55,32 @@ def plot_bokeh(data_frames, datas, spike_plot_images_path, dump_files_paths, tit
     print("Loading Bokeh Plotting Interface")
     images_path = spike_plot_images_path
 
+    data_frames = {}
     for title in titles:
+
+        umap_default_parameters = {"n_neighbors": 20, "min_dist": 0.0, "n_components": 2}
+        temp_umap_out = util.get_dimensional_reduction_out("UMAP", datas[title],
+                                                           dump_path=os.path.abspath(dump_files_paths[title]).replace(
+                                                               "\\", '/'),
+                                                           reduction_functions=reduction_functions,
+                                                           reduction_params=umap_default_parameters,
+                                                           pca_preprocessing=False)
+
+        if debug: print('Umap vals: ' + str(temp_umap_out.shape))
+
+        # Apply HDBSCAN clustering
+        clusterer = hdbscan.HDBSCAN(min_cluster_size=5, min_samples=1)
+        clusters = clusterer.fit_predict(temp_umap_out)
+
+        data_frames[title] = pd.DataFrame(temp_umap_out, columns=['x', 'y'])
+        # creates an index for merging
+        data_frames[title].index = range(len(data_frames[title]))
+        additional_data[title].index = range(len(additional_data[title]))
+        data_frames[title] = data_frames[title].merge(additional_data[title], left_index=True, right_index=True)
+        data_frames[title]['Task'] = data_frames[title]['Task'].astype(str)
+        # Add cluster labels to your dataframe
+        data_frames[title]['Cluster'] = clusters
+
         data_frames[title] = data_frames[title].sample(frac=1, random_state=42)
         if debug: print(f"Dataframe {title}: \n{data_frames[title]}")
         data_frames[title]['pdIndex'] = data_frames[title].index
@@ -188,7 +213,7 @@ def plot_bokeh(data_frames, datas, spike_plot_images_path, dump_files_paths, tit
     and_filter_multi_choice = MultiChoice(title="'AND' Filter:", value=[], options=options_filter_multi_choice,
                                           width=200)
     export_data_button = Button(label="Export Data")
-    export_only_selection_toggle = Checkbox(label="Export only selection (experimental)", active=True)
+    export_only_selection_toggle = Checkbox(label="Export only selection", active=True)
     options_export_sort_category = datasource_df.columns.tolist()
     select_export_sort_category = Select(title="Sort export by", value="Cluster", options=options_export_sort_category)
 
@@ -324,7 +349,7 @@ def plot_bokeh(data_frames, datas, spike_plot_images_path, dump_files_paths, tit
     def get_current_dimension_reduction_parameters():
         out = {}
         reduction_function = select_dimensional_reduction.value
-        if reduction_function is not 'None':
+        if reduction_function != 'None':
             for numeric_parameter in reduction_functions[reduction_function]["numeric_parameters"].keys():
                 value = reduction_functions_widgets[reduction_function][numeric_parameter].value
                 if type(value) == float:
@@ -349,24 +374,39 @@ def plot_bokeh(data_frames, datas, spike_plot_images_path, dump_files_paths, tit
     # Callback function to update graph when sliders change
     def update_graph(attr, old, new):
         nonlocal datasource_df, update_cluster_toggle_df, current_cluster
-
         # Resets to initial state
         datasource_df = pd.DataFrame.copy(data_frames[select_data.value])
         # TODO fix Update Cluster
         # TODO if changing dataset, reset option to activate update cluster checkbox again
+
         if debug: print(datasource_df)
         if debug: print(update_cluster_toggle_df)
         if debug: print(update_cluster_toggle_df[update_cluster_toggle_df["Task"] == "1"])
         # Set the 'ID' column as the index in both DataFrames
         # datasource_df.set_index('pdIndex', inplace=True)
         # update_cluster_toggle_df.set_index('pdIndex', inplace=True)
-        datasource_df.update(update_cluster_toggle_df["Cluster"])
+        # TODO fix index problem: update_cluster_df has new index starting from 0 --> use pdIndex instead
+        update_cluster_toggle_df.set_index(update_cluster_toggle_df["pdIndex"])
+        datasource_df.set_index(datasource_df["pdIndex"])
+        # IDEA: merge the two dataframes and just keep first and potentially updated version
+        # datasource_df=pd.merge(update_cluster_toggle_df,datasource_df,on="pdIndex")
+        # datasource_df.drop_duplicates(keep="first")
+        datasource_df["Cluster"].update(update_cluster_toggle_df["Cluster"])
         if debug: print(datasource_df[datasource_df["Task"] == "1"])
         # datasource_df.reset_index(inplace=True)
         current_data = datas[select_data.value]
         print(get_current_dimension_reduction_parameters())
-        if enable_pca_checkbox.active:
-            select_pca_dimensions_slider.disabled = False
+
+        if enable_pca_checkbox.active or select_dimensional_reduction.value == "None":
+            # this is to prevent the pca settings to be used if there is no dimensional reduction selected, so the data still gets reduced to 2 dimensions
+            if select_dimensional_reduction.value == "None":
+                enable_pca_checkbox.active = True
+                enable_pca_checkbox.disabled = True
+                select_pca_dimensions_slider.value = 2
+                select_pca_dimensions_slider.disabled = True
+            else:
+                enable_pca_checkbox.disabled = False
+                select_pca_dimensions_slider.disabled = False
             pca_diagnostic_plot_button.disabled = False
             umap_result = util.get_dimensional_reduction_out(select_dimensional_reduction.value, current_data,
                                                              dump_path=os.path.abspath(
@@ -388,21 +428,21 @@ def plot_bokeh(data_frames, datas, spike_plot_images_path, dump_files_paths, tit
                                                              pca_preprocessing=False)
 
         datasource_df['x'], datasource_df['y'] = umap_result[:, 0], umap_result[:, 1]
+        data_frames[select_data.value]['x'], data_frames[select_data.value]['y'] = umap_result[:, 0], umap_result[:, 1]
         # datasource.data.update({'x': umap_result[:, 0], 'y': umap_result[:, 1]})
+        initial_df = pd.DataFrame.copy(datasource_df)
         if len(or_filter_multi_choice.value) != 0:
             datasource_df = pd.DataFrame(columns=datasource_df.columns)
             for option in or_filter_multi_choice.value:
-                initial_df = pd.DataFrame.copy(data_frames[select_data.value])
+                current_df = pd.DataFrame.copy(initial_df)
                 # makes a dataframe with just the filtered entries and merges it with the other selected values
-                filter_df = initial_df[
-                    initial_df[options_filter_multi_choice_values[option][0]] ==
+                filter_df = current_df[
+                    current_df[options_filter_multi_choice_values[option][0]] ==
                     options_filter_multi_choice_values[option][
                         1]]
                 datasource_df = pd.merge(datasource_df, filter_df, how='outer')
 
             datasource_df = datasource_df.drop_duplicates(keep="first")
-            # shuffles Data order for plotting
-            datasource_df = datasource_df.sample(frac=1, random_state=42)
 
         if len(and_filter_multi_choice.value) != 0:
             for option in and_filter_multi_choice.value:
@@ -434,7 +474,11 @@ def plot_bokeh(data_frames, datas, spike_plot_images_path, dump_files_paths, tit
             # Add cluster labels to your dataframe
             datasource_df['Cluster'] = clusters
         if debug: print(datasource_df)
-
+        # shuffles Data order for plotting
+        datasource_df = datasource_df.sample(frac=1, random_state=42)
+        if update_clusters_toggle.active:
+            update_cluster_toggle_df = pd.DataFrame.copy(datasource_df, True)
+        if debug: print(datasource_df)
         select_cluster_slider.end = len(np.unique(datasource_df['Cluster']))
 
         # Update the existing datasource
@@ -450,16 +494,6 @@ def plot_bokeh(data_frames, datas, spike_plot_images_path, dump_files_paths, tit
                 reduction_functions_layouts[reduction_functions_layout_name].visible = True
             else:
                 reduction_functions_layouts[reduction_functions_layout_name].visible = False
-
-        if select_dimensional_reduction.value is "None":
-            # TODO make it so if None or a invalid value is selected, the pca is automatically enabled, the dimension and disable button is disabled and the dimension is set to 2
-
-            if not enable_pca_checkbox.active:
-                enable_pca_checkbox.active = True
-
-                pca_diagnostic_plot_button.disabled = False
-            select_pca_dimensions_slider.value = 2
-            select_pca_dimensions_slider.disabled = True
 
         update_graph(attr=None, old=None, new=None)
 
@@ -564,12 +598,6 @@ def plot_bokeh(data_frames, datas, spike_plot_images_path, dump_files_paths, tit
     def update_grid_button():
         update_grid(attr=None, old=None, new=None)
 
-    def update_cluster_toggle_function(attr, old, new):
-        nonlocal update_cluster_toggle_df, datasource_df
-        if update_clusters_toggle.active:
-            update_cluster_toggle_df = pd.DataFrame.copy(datasource_df)
-        update_graph(attr=None, old=None, new=None)
-
     def update_grid(attr, old, new):
         global grid_size_y, grid_size_x
         if enable_grid_checkbox.active:
@@ -619,8 +647,7 @@ def plot_bokeh(data_frames, datas, spike_plot_images_path, dump_files_paths, tit
     def export_data():
         nonlocal output_file_path
         export_df = datasource_df
-        if not export_only_selection_toggle:
-            # TODO doesnt work with updating dataframe
+        if not export_only_selection_toggle.active:
             export_df = pd.DataFrame.copy(data_frames[select_data.value])
 
             export_df.update(datasource_df)
@@ -772,7 +799,7 @@ def plot_bokeh(data_frames, datas, spike_plot_images_path, dump_files_paths, tit
     select_cluster_slider.on_change('value_throttled', update_current_cluster)
 
     # Cluster Parameters
-    update_clusters_toggle.on_change("active", update_cluster_toggle_function)
+    update_clusters_toggle.on_change("active", update_graph)
     min_cluster_size_slider.on_change('value_throttled', update_graph)
     min_samples_slider.on_change('value_throttled', update_graph)
     cluster_selection_epsilon_slider.on_change('value_throttled', update_graph)

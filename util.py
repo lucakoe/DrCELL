@@ -63,10 +63,16 @@ def get_dimensional_reduction_out(reduction_function_name, data, dump_path, redu
                                   pca_preprocessing=False, pca_n_components=2, show_pca_diagnostic_plot=False):
     dump_path = os.path.join(os.path.dirname(dump_path), f"{reduction_function_name}_" + os.path.basename(dump_path))
 
-    if pca_preprocessing:
-        param_key = tuple(reduction_params.items()) + (("pca_preprocessing_n_components", pca_n_components),)
+    if reduction_function_name == "None" or reduction_function_name == None:
+        pca_preprocessing = True
+        pca_n_components = 2
+        param_key = (("pca_preprocessing_n_components", pca_n_components),)
+        reduction_params = {"pca_preprocessing_n_components": pca_n_components}
     else:
-        param_key = tuple(reduction_params.items())
+        if pca_preprocessing:
+            param_key = tuple(reduction_params.items()) + (("pca_preprocessing_n_components", pca_n_components),)
+        else:
+            param_key = tuple(reduction_params.items())
 
     buffered_data_dump = {}
 
@@ -94,9 +100,13 @@ def get_dimensional_reduction_out(reduction_function_name, data, dump_path, redu
                 f"Generate {reduction_function_name} with PCA preprocessing: File = {os.path.basename(dump_path)}, {reduction_params}, PCA n_components = {pca_n_components}")
             current_data = apply_pca_preprocessing(current_data, n_components=pca_n_components,
                                                    show_diagnostic_plot=show_pca_diagnostic_plot)
+        else:
+            print(f"Generate {reduction_function_name}: File = {os.path.basename(dump_path)}, {reduction_params}")
 
-        print(f"Generate {reduction_function_name}: File = {os.path.basename(dump_path)}, {reduction_params}")
-        reduced_data = reduction_functions[reduction_function_name]["function"](current_data, **reduction_params)
+        if reduction_function_name == "None" or reduction_function_name == None:
+            reduced_data = current_data
+        else:
+            reduced_data = reduction_functions[reduction_function_name]["function"](current_data, **reduction_params)
 
         buffered_data_dump[param_key] = reduced_data
 
@@ -106,72 +116,6 @@ def get_dimensional_reduction_out(reduction_function_name, data, dump_path, redu
 
     print(f"Return {reduction_function_name}: File = {os.path.basename(dump_path)}, {reduction_params}")
     return buffered_data_dump[param_key]
-
-
-# depreciated
-def get_umap_out(data, dump_path, n_neighbors=20,
-                 min_dist=0.0,
-                 n_components=2,
-                 random_state=42, pca_preprocessing=False, pca_n_components=2, show_pca_diagnostic_plot=False):
-    if pca_preprocessing:
-        param_key = (n_neighbors, min_dist, n_components, random_state, pca_n_components)
-    else:
-        param_key = (n_neighbors, min_dist, n_components, random_state)
-    umap_out_df_dump = {}
-
-    # Checks the global variable if the dumpfile with this path was already called.
-    # If so instead of loading it for every call of the function it takes the data from there
-    if not (dump_path in dimensional_reduction_out_dump_data):
-        # Check if the file exists
-        if os.path.exists(dump_path):
-            with open(dump_path, 'rb') as file:
-                dimensional_reduction_out_dump_data[dump_path] = pickle.load(file)
-        else:
-            # If the file doesn't exist, create it and write something to it
-            with open(dump_path, 'wb') as file:
-                pickle.dump(umap_out_df_dump, file)
-                dimensional_reduction_out_dump_data[dump_path] = umap_out_df_dump
-
-            print(f"The file '{dump_path}' has been created.")
-
-    umap_out_df_dump = dimensional_reduction_out_dump_data[dump_path]
-    current_data = data
-    if not (param_key in umap_out_df_dump):
-        if pca_preprocessing:
-            print(
-                f"Generate UMAP with PCA preprocessing: File = {os.path.basename(dump_path)}, n_neighbors = {n_neighbors}, min_dist = {min_dist}, pca_n_components = {pca_n_components}")
-            pca_operator = sklearn.decomposition.PCA(n_components=pca_n_components)
-            pca = pca_operator.fit_transform(current_data)
-
-            current_data = pca
-
-            if show_pca_diagnostic_plot:
-                diagnostic_data = pca_operator.explained_variance_ratio_
-                diagnostic_plot = plotting.return_pca_diagnostic_plot(diagnostic_data)
-                diagnostic_plot.show()
-
-        else:
-            print(
-                f"Generate UMAP: File = {os.path.basename(dump_path)}, n_neighbors = {n_neighbors}, min_dist = {min_dist}")
-
-        umap_object = umap.UMAP(
-            n_neighbors=n_neighbors,
-            min_dist=min_dist,
-            n_components=n_components,
-            random_state=random_state,
-        )
-        umap_out_df_dump[param_key] = umap_object.fit_transform(current_data)
-
-        with open(dump_path, 'wb') as file:
-            dimensional_reduction_out_dump_data[dump_path] = umap_out_df_dump
-            pickle.dump(umap_out_df_dump, file)
-    if pca_preprocessing:
-        print(
-            f"Return UMAP with PCA preprocessing: File = {os.path.basename(dump_path)}, n_neighbors = {n_neighbors}, min_dist = {min_dist}, pca_n_components = {pca_n_components}")
-    else:
-        print(
-            f"Return UMAP: File = {os.path.basename(dump_path)}, n_neighbors = {n_neighbors}, min_dist = {min_dist}")
-    return umap_out_df_dump[param_key]
 
 
 def load_and_preprocess_data(c_file):
@@ -245,46 +189,6 @@ def load_and_preprocess_data(c_file):
     return umap_df, matrix_legend_df, Y
 
 
-import colorsys
-
-
-def generate_color_palette(num_colors):
-    """
-    Generate a list of distinct colors based on the number of colors needed.
-
-    Args:
-        num_colors (int): The number of colors to generate.
-
-    Returns:
-        list: A list of distinct colors in hexadecimal format, e.g., ['#FF0000', '#00FF00', ...]
-    """
-
-    def rgb_to_hex(rgb):
-        """
-        Convert an RGB color tuple to a hexadecimal color string.
-
-        Args:
-            rgb (tuple): An RGB color tuple, e.g., (255, 0, 0).
-
-        Returns:
-            str: Hexadecimal color string, e.g., '#FF0000'.
-        """
-        # Ensure the RGB values are integers
-        r, g, b = [int(x) for x in rgb]
-        return '#{:02X}{:02X}{:02X}'.format(r, g, b)
-
-    if num_colors <= 0:
-        return []
-
-    # Create a list of evenly spaced hue values
-    hue_values = [i / num_colors for i in range(num_colors)]
-
-    # Convert hue to RGB colors
-    colors = [rgb_to_hex(colorsys.hsv_to_rgb(hue, 1, 1)) for hue in hue_values]
-
-    return colors
-
-
 def generate_grid(min_point, max_point, center_point=(0.0, 0.0), grid_size_x=1, grid_size_y=1):
     # Define grid parameters
     center_x = center_point[0]  # Center x-coordinate of the grid
@@ -337,26 +241,6 @@ def assign_points_to_grid(points_df, grid_df, new_column_grid_df_name_and_proper
                 grid_df.at[index, name_and_property[1]] = points_in_grid[name_and_property[0]]
 
     return grid_df
-
-
-def generate_umap_parameters(data, dump_files_path, n_neighbors_values, min_dist_values, pca_n_components,
-                             n_components_values=[2]):
-    for n_neighbors_value in n_neighbors_values:
-        for min_dist_value in min_dist_values:
-            for n_components_value in n_components_values:
-                get_umap_out(data,
-                             os.path.abspath(dump_files_path),
-                             n_neighbors=n_neighbors_value,
-                             min_dist=min_dist_value, n_components=n_components_value)
-                if n_components_value > 3:
-                    for pca_n_components_value in pca_n_components:
-                        get_umap_out(data,
-                                     os.path.abspath(os.path.abspath(dump_files_path)).replace("\\",
-                                                                                               '/'),
-                                     n_neighbors=n_neighbors_value, min_dist=round(min_dist_value, 2),
-                                     n_components=n_components_value,
-                                     pca_n_components=int(pca_n_components_value),
-                                     pca_preprocessing=True)
 
 
 def generate_umap(data, n_neighbors, min_dist, n_components=2, random_state=42):

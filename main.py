@@ -121,7 +121,6 @@ umap_df, matrix_legend_df, cleaned_data = util.load_and_preprocess_data(input_fi
 cleaned_datas = {}
 matrix_legend_dfs = {}
 dump_files_paths = {}
-cell_dfs = {}
 
 for title in titles:
     cleaned_datas[title] = cleaned_data
@@ -158,48 +157,13 @@ for title in titles:
     umap_object = umap.UMAP
 
     if generate_umap_parameters:
-        if experimental:
-            n_neighbors_values = range(2, 51, 1)
-            min_dist_values = np.arange(0.0, 1.01, 0.01).tolist()
-            min_dist_values = [round(x, 2) for x in min_dist_values]
-            pca_n_components = range(2, cleaned_datas[title].shape[1])
-
-        else:
-            n_neighbors_values = range(10, 21, 1)
-            min_dist_values = np.arange(0.0, 0.11, 0.01).tolist()
-            min_dist_values = [round(x, 2) for x in min_dist_values]
-            # TODO add pca_n_component range
-            pca_n_components = []
-
-        util.generate_umap_parameters(cleaned_datas[title], dump_files_paths[title], n_neighbors_values,
-                                      min_dist_values, pca_n_components)
+        print("broken")
+        # TODO add dimensionality reduction buffering method
     # gets the UMAP Output file. This function is used to buffer already created UMAPs and improve performance
     if debug: print(os.path.abspath(dump_files_paths[title]))
-    umap_default_parameters = {"n_neighbors": 20, "min_dist": 0.0, "n_components": 2}
-    temp_umap_out = util.get_dimensional_reduction_out("UMAP", cleaned_datas[title],
-                                                       dump_path=os.path.abspath(dump_files_paths[title]).replace(
-                                                           "\\", '/'),
-                                                       reduction_functions=reduction_functions,
-                                                       reduction_params=umap_default_parameters,
-                                                       pca_preprocessing=False)
-
-    if debug: print('Umap vals: ' + str(temp_umap_out.shape))
-
-    # Apply HDBSCAN clustering
-    clusterer = hdbscan.HDBSCAN(min_cluster_size=5, min_samples=1)
-    clusters = clusterer.fit_predict(temp_umap_out)
-
-    cell_dfs[title] = pd.DataFrame(temp_umap_out, columns=['x', 'y'])
-    # creates an index for merging
-    cell_dfs[title].index = range(len(cell_dfs[title]))
-    matrix_legend_dfs[title].index = range(len(matrix_legend_dfs[title]))
-    cell_dfs[title] = cell_dfs[title].merge(matrix_legend_dfs[title], left_index=True, right_index=True)
-    cell_dfs[title]['Task'] = cell_dfs[title]['Task'].astype(str)
-    # Add cluster labels to your dataframe
-    cell_dfs[title]['Cluster'] = clusters
 
 # plots UMAP via Bokeh
-plotting.plot_bokeh(cell_dfs, cleaned_datas, spike_plot_images_path, dump_files_paths, titles,
+plotting.plot_bokeh(cleaned_datas, matrix_legend_dfs, spike_plot_images_path, dump_files_paths, titles,
                     reduction_functions=reduction_functions,
                     bokeh_show=bokeh_show,
                     start_dropdown_data_option=titles[0], data_variables=data_variables,
