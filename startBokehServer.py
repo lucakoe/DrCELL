@@ -4,21 +4,36 @@ from bokeh.application.handlers.script import ScriptHandler
 from tornado.ioloop import IOLoop
 import argparse
 
+# Global variable to hold the server instance
+server_instance = None
 
 
 def run_server(port=5000, app_path='main.py'):
+    global server_instance
+
     # Create a Bokeh application
     bokeh_app = Application(ScriptHandler(filename=app_path))
 
     # Create a Bokeh server
-    server = Server({'/': bokeh_app}, io_loop=IOLoop(), port=port)
+    server_instance = Server({'/': bokeh_app}, io_loop=IOLoop(), port=port)
 
     # Start the Bokeh server
-    server.start()
-    print("Server started at localhost:" + str(server.port))
+    server_instance.start()
+    print("Server started at localhost:" + str(server_instance.port))
 
     # Run the IOLoop to keep the server running
-    server.io_loop.start()
+    server_instance.io_loop.start()
+
+
+def stop_server():
+    global server_instance
+
+    if server_instance is not None:
+        # Stop the Bokeh server
+        server_instance.stop()
+        server_instance.io_loop.stop()
+        print("Server stopped")
+
 
 if __name__ == "__main__":
     # Parse command-line arguments

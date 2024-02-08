@@ -24,7 +24,7 @@ data_variables = ["Task", "IsChoiceSelect", "IsStimSelect", "RedNeurons"]
 # variables from the input data, that gets displayed in the hover tool
 display_hover_variables = ["pdIndex", "Neuron", "ChoiceAUCs", "StimAUCs"]
 
-project_path = r"C:\Users\Luca Koenig\OneDrive - Students RWTH Aachen University\Bachelorarbeit\GitHub\CELL"
+project_path = r"C:\Users\koenig\OneDrive - Students RWTH Aachen University\Bachelorarbeit\GitHub\CELL"
 data_path = os.path.join(project_path, "data")
 # it's important to use different names for different datasets!
 # otherwise already buffered data from older datasets gets mixed with the new dataset!
