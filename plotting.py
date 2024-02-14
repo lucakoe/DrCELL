@@ -19,7 +19,10 @@ from bokeh.palettes import Muted9
 import io
 import os
 
+import imageServer
 import util
+
+current_dataset = None
 
 
 def generate_diagnostic_plots(umap_object, data):
@@ -54,6 +57,8 @@ def plot_bokeh(datas, additional_data, spike_plot_images_path, dump_files_paths,
         titles.insert(0, "all")
     print("Loading Bokeh Plotting Interface")
     images_path = spike_plot_images_path
+
+    httpd_image_server = imageServer.start_server(8000)
 
     data_frames = {}
     for title in titles:
@@ -156,7 +161,7 @@ def plot_bokeh(datas, additional_data, spike_plot_images_path, dump_files_paths,
 
         <div>
             <img
-                src="http://localhost:""" + str(image_server_port) + """/?image=""" + """image_@{index}.png" height="100" alt="Image"
+                src="http://localhost:""" + str(image_server_port) + """/?generate=""" + """@{pdIndex}" height="100" alt="Image"
                 style="float: left; margin: 0px 15px 15px 0px;"
                 border="1"
             />
@@ -164,27 +169,41 @@ def plot_bokeh(datas, additional_data, spike_plot_images_path, dump_files_paths,
         
         
     """, renderers=[scatter_plot])
-    # TODO finish grid hover tool
+
+    scatter_plot_cluster_hover_tool = HoverTool(tooltips="""
+
+        <div>
+            <span style='font-size: 8px'>@{Cluster}</span>
+        </div>
+
+
+    """, renderers=[scatter_plot])
+
     grid_plot_hover_tool = HoverTool(tooltips="""
     <div>
         <span style='font-size: 8px; color: #224499'>Grid ID:</span>\n
-        <span style='font-size: 8px'>@{gridID}</span>\n
-        <span style='font-size: 8px; color: #224499'>Grid Point Indices:</span>\n
-        <span style='font-size: 8px'>@{pointIndices}</span>\n
-        <span style='font-size: 8px; color: #224499'>Grid Point Neurons:</span>\n
-        <span style='font-size: 8px'>@{pointNeurons}</span>\n
-        
+        <span style='font-size: 8px'>@{gridID}</span>\n """ +
+                                              #                                               """
+                                              #         <span style='font-size: 8px; color: #224499'>Grid Point Indices:</span>\n
+                                              #         <span style='font-size: 8px'>@{pointIndices}</span>\n
+                                              #         <span style='font-size: 8px; color: #224499'>Grid Point Neurons:</span>\n
+                                              #         <span style='font-size: 8px'>@{pointNeurons}</span>\n
+                                              # """
+                                              #                                               +
+                                              """
     </div>
-    <div>
-        <img src="data:image/png;base64, @{image}" style="float: left; margin: 0px 15px 15px 0px; width: 100px; height: auto;">
-
-    </div>
+        <img
+            src="http://localhost:""" + str(image_server_port) + """/?generate=""" + """@{pointIndices}" height="100" alt="Image"
+            style="float: left; margin: 0px 15px 15px 0px;"
+            border="1"
+        />
            
     </div>
     """, renderers=[grid_plot])
 
     # Add a HoverTool to display the Matplotlib plot when hovering over a data point
     plot_figure.add_tools(scatter_plot_hover_tool)
+    plot_figure.add_tools(scatter_plot_cluster_hover_tool)
     plot_figure.add_tools(grid_plot_hover_tool)
 
     # Create an empty line Div for spacing
@@ -487,6 +506,7 @@ def plot_bokeh(datas, additional_data, spike_plot_images_path, dump_files_paths,
         update_grid(attr=None, old=None, new=None)
         datasource.data.update(datasource.data)
         update_category(attr=None, old=None, new=None)
+        update_current_dataset(current_data)
 
     def update_dimensional_reduction(attr, old, new):
         for reduction_functions_layout_name in list(reduction_functions_layouts.keys()):
@@ -827,14 +847,24 @@ def plot_bokeh(datas, additional_data, spike_plot_images_path, dump_files_paths,
     print("Finished loading Bokeh Plotting Interface")
 
 
-def plot_and_return_spikes(fluorescence_array, fps=30, number_consecutive_recordings=6):
+def plot_and_return_spikes(fluorescence_arrays, indices, fps=30, number_consecutive_recordings=6,
+                           normalized_background_traces=False):
     # Calculate time values based on the frame rate per second
-    n = len(fluorescence_array)
+    n = fluorescence_arrays.shape[1]
     time_values = np.arange(n) / fps
 
     # Plot intensity against time
     plt.figure(figsize=(10, 4))  # Adjust the figure size as needed
-    plt.plot(time_values, fluorescence_array, linestyle='-')
+
+    # takes just the arrays with corresponding indices
+    selected_arrays = fluorescence_arrays[indices]
+    # makes median over all
+    median_selected_arrays = np.median(selected_arrays, axis=0)
+    if normalized_background_traces:
+        for fluorescence_array in fluorescence_arrays:
+            plt.plot(time_values, fluorescence_array, linestyle='-', color='gray', alpha=0.3)
+
+    plt.plot(time_values, median_selected_arrays, linestyle='-')
     plt.xlabel('Time (s)')
     plt.ylabel('Fluorescence Intensity')
     plt.title('Fluorescence Intensity vs. Time')
@@ -842,7 +872,7 @@ def plot_and_return_spikes(fluorescence_array, fps=30, number_consecutive_record
 
     # Add vertical lines at specific x-coordinates (assuming they have the same recording length)
     for i in range(1, number_consecutive_recordings):
-        plt.axvline(x=((len(fluorescence_array) / fps) / number_consecutive_recordings) * i, color='black',
+        plt.axvline(x=((fluorescence_arrays.shape[1] / fps) / number_consecutive_recordings) * i, color='black',
                     linestyle='--')
 
     # Show the plot
@@ -851,20 +881,36 @@ def plot_and_return_spikes(fluorescence_array, fps=30, number_consecutive_record
     return plt
 
 
-def plot_and_return_spike_images_b64(fluorescence_array, fps=30, number_consecutive_recordings=6):
-    # takes selected row (fluorescence data of one cell), makes it to an array and plots it
-    plt = plot_and_return_spikes(fluorescence_array, fps=fps,
-                                 number_consecutive_recordings=number_consecutive_recordings)
-    buf = io.BytesIO()
-    plt.savefig(buf, format='png', dpi=80)
-    image_b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+def get_plot_for_indices(fluorescence_arrays, indices, fps=30, number_consecutive_recordings=6, extend_plot=False):
+    if fluorescence_arrays is None or indices is None:
+        print("No image to plot")
+        # Create a figure with a black background
+        fig = plt.figure(facecolor='black')
+        ax = fig.add_subplot(111, facecolor='black')
 
-    return image_b64
+        # Hide axis and grid lines
+        ax.axis('off')
+        return plt
+    else:
+        return plot_and_return_spikes(fluorescence_arrays, indices, fps=fps,
+                                      number_consecutive_recordings=number_consecutive_recordings,
+                                      normalized_background_traces=extend_plot)
+
+
+def get_plot_for_indices_of_current_dataset(indices, fps=30, number_consecutive_recordings=6, extend_plot=False):
+    global current_dataset
+    return get_plot_for_indices(current_dataset, indices, fps=fps,
+                                number_consecutive_recordings=number_consecutive_recordings, extend_plot=extend_plot)
+
+
+def update_current_dataset(dataset):
+    global current_dataset
+    current_dataset = dataset
 
 
 def plot_and_save_spikes(neuron_number, dataframe, output_folder, fps=30, number_consecutive_recordings=6):
     # takes selected row (fluorescence data of one cell), makes it to an array and plots it
-    plt = plot_and_return_spikes(dataframe.iloc[neuron_number].values, fps=fps,
+    plt = plot_and_return_spikes(dataframe.values, neuron_number, fps=fps,
                                  number_consecutive_recordings=number_consecutive_recordings)
     buf = io.BytesIO()
     plt.savefig(buf, format='png', dpi=80)

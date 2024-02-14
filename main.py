@@ -42,6 +42,7 @@ umap_out_param_dump_filename_extension = "_parameter_buffer_dump.pkl"
 
 reduction_functions = {}
 # n_components has to be 2 in custom functions; first parameter has to be data!!!
+# TODO rename to nominal and continuous parameters
 reduction_functions["UMAP"] = {"function": util.generate_umap,
                                "numeric_parameters": {"n_neighbors": {"start": 2, "end": 50, "step": 1, "value": 20},
                                                       "min_dist": {"start": 0.00, "end": 1.0, "step": 0.01,
@@ -70,7 +71,7 @@ reduction_functions["PHATE"] = {"function": util.generate_phate,
                                                        "t": {"start": 5, "end": 100, "step": 1, "value": 5},
                                                        "gamma": {"start": 0, "end": 10, "step": 0.1,
                                                                  "value": 0},
-                                                       "n_jobs": {"start": -1, "end": 4, "step": 1, "value": -1},
+
                                                        "n_pca": {"start": 5, "end": 100, "step": 1,
                                                                  "value": 100},
                                                        "n_landmark": {"start": 50, "end": 1000, "step": 10,
@@ -79,7 +80,7 @@ reduction_functions["PHATE"] = {"function": util.generate_phate,
                                                        },
                                 "bool_parameters": {"verbose": False},
                                 "select_parameters": {},
-                                "constant_parameters": {"n_components": (2)}}
+                                "constant_parameters": {"n_components": (2), "n_jobs": (-1)}}
 
 print(f"Using '{input_file_path}' as input file.")
 # creates a folder for the corresponding input file, where data gets saved
@@ -118,12 +119,12 @@ if __name__ == '__main__':
 titles = ["all", "excludeChoiceUnselectBefore", "excludeStimUnselectBefore"]
 umap_df, matrix_legend_df, cleaned_data = util.load_and_preprocess_data(input_file_path)
 
-cleaned_datas = {}
+cleaned_data_arrays = {}
 matrix_legend_dfs = {}
 dump_files_paths = {}
 
 for title in titles:
-    cleaned_datas[title] = cleaned_data
+    cleaned_data_arrays[title] = cleaned_data
     matrix_legend_dfs[title] = matrix_legend_df
 
     if title == "all":
@@ -131,17 +132,17 @@ for title in titles:
 
     elif title == "excludeChoiceUnselectBefore":
         # Filters cells with Property
-        cleaned_datas[title] = cleaned_data[matrix_legend_df["IsChoiceSelect"]]
+        cleaned_data_arrays[title] = cleaned_data[matrix_legend_df["IsChoiceSelect"]]
         matrix_legend_dfs[title] = matrix_legend_df[matrix_legend_df["IsChoiceSelect"]]
         print(f"{title} Data Length: {matrix_legend_df['IsChoiceSelect'].apply(lambda x: x).sum()}")
 
     elif title == "excludeStimUnselectBefore":
         # Filters cells with Property
-        cleaned_datas[title] = cleaned_data[matrix_legend_df["IsStimSelect"]]
+        cleaned_data_arrays[title] = cleaned_data[matrix_legend_df["IsStimSelect"]]
         matrix_legend_dfs[title] = matrix_legend_df[matrix_legend_df["IsStimSelect"]]
         print(f"{title} Data Length: {matrix_legend_df['IsStimSelect'].apply(lambda x: x).sum()}")
 
-    if debug: print(f"Cleaned Data {title}: \n{cleaned_datas[title]}")
+    if debug: print(f"Cleaned Data {title}: \n{cleaned_data_arrays[title]}")
 
     dump_files_paths[title] = os.path.abspath(
         os.path.join(dump_files_path, title + umap_out_param_dump_filename_extension))
@@ -163,7 +164,7 @@ for title in titles:
     if debug: print(os.path.abspath(dump_files_paths[title]))
 
 # plots UMAP via Bokeh
-plotting.plot_bokeh(cleaned_datas, matrix_legend_dfs, spike_plot_images_path, dump_files_paths, titles,
+plotting.plot_bokeh(cleaned_data_arrays, matrix_legend_dfs, spike_plot_images_path, dump_files_paths, titles,
                     reduction_functions=reduction_functions,
                     bokeh_show=bokeh_show,
                     start_dropdown_data_option=titles[0], data_variables=data_variables,
