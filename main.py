@@ -28,7 +28,7 @@ project_path = r"C:\Users\koenig\OneDrive - Students RWTH Aachen University\Bach
 data_path = os.path.join(project_path, "data")
 # it's important to use different names for different datasets!
 # otherwise already buffered data from older datasets gets mixed with the new dataset!
-input_file_path = os.path.join(data_path, r'Umap_2530_2532MedianChoiceStim30trials_Array.mat')
+input_file_path = os.path.join(data_path, r'20231102_014600_MedianChoiceStim30trials_UmapIn_short.mat')
 # path created for the data of the given input file
 input_folder_path = os.path.join(data_path, os.path.splitext(os.path.basename(input_file_path))[0])
 # folder for output file for exports of corresponding input file

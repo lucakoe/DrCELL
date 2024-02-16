@@ -193,7 +193,7 @@ def plot_bokeh(datas, additional_data, spike_plot_images_path, dump_files_paths,
                                               """
     </div>
         <img
-            src="http://localhost:""" + str(image_server_port) + """/?generate=""" + """@{pointIndices}" height="100" alt="Image"
+            src="http://localhost:""" + str(image_server_port) + """/?generate=""" + """@{pointIndices}&extend-plot=True" height="100" alt="Image"
             style="float: left; margin: 0px 15px 15px 0px;"
             border="1"
         />
@@ -847,22 +847,49 @@ def plot_bokeh(datas, additional_data, spike_plot_images_path, dump_files_paths,
     print("Finished loading Bokeh Plotting Interface")
 
 
-def plot_and_return_spikes(fluorescence_arrays, indices, fps=30, number_consecutive_recordings=6,
-                           normalized_background_traces=False):
+def plot_and_return_spikes(trace_data_arrays, indices, fps=30, number_consecutive_recordings=6,
+                           background_traces=False):
+
+    """Plot spike times: if one array in fluorescence_arrays, then raw data is plotted if multiple arrays in fluorescence_arrays, then median gets plotted.
+
+    Parameters
+    ----------
+    trace_data_arrays : np.ndarray
+        2-dimensional array with trace data
+    indices : list
+        list of indices of traces to be plotted from the fluorescence_arrays
+    fps : int
+        frames per second of recording (to calculate the time values of the samples)
+    number_consecutive_recordings : int
+        number of recordings that are stitched together (relevant for dividing lines in plot)
+    background_traces : boolean
+        if True plots the raw traces of the selected indices gray in the background (applies only with multiple traces)
+
+    Returns
+    -------
+    matplotlib.pyplot
+        plot of spike trace
+
+
+    """
+
+
     # Calculate time values based on the frame rate per second
-    n = fluorescence_arrays.shape[1]
+    n = trace_data_arrays.shape[1]
     time_values = np.arange(n) / fps
 
     # Plot intensity against time
     plt.figure(figsize=(10, 4))  # Adjust the figure size as needed
 
     # takes just the arrays with corresponding indices
-    selected_arrays = fluorescence_arrays[indices]
+    selected_arrays = trace_data_arrays[indices]
     # makes median over all
+
     median_selected_arrays = np.median(selected_arrays, axis=0)
-    if normalized_background_traces:
-        for fluorescence_array in fluorescence_arrays:
-            plt.plot(time_values, fluorescence_array, linestyle='-', color='gray', alpha=0.3)
+
+    if background_traces:
+        for selected_fluorescence_array in selected_arrays:
+            plt.plot(time_values, selected_fluorescence_array, linestyle='-', color='gray', alpha=0.3)
 
     plt.plot(time_values, median_selected_arrays, linestyle='-')
     plt.xlabel('Time (s)')
@@ -872,7 +899,7 @@ def plot_and_return_spikes(fluorescence_arrays, indices, fps=30, number_consecut
 
     # Add vertical lines at specific x-coordinates (assuming they have the same recording length)
     for i in range(1, number_consecutive_recordings):
-        plt.axvline(x=((fluorescence_arrays.shape[1] / fps) / number_consecutive_recordings) * i, color='black',
+        plt.axvline(x=((trace_data_arrays.shape[1] / fps) / number_consecutive_recordings) * i, color='black',
                     linestyle='--')
 
     # Show the plot
@@ -894,7 +921,7 @@ def get_plot_for_indices(fluorescence_arrays, indices, fps=30, number_consecutiv
     else:
         return plot_and_return_spikes(fluorescence_arrays, indices, fps=fps,
                                       number_consecutive_recordings=number_consecutive_recordings,
-                                      normalized_background_traces=extend_plot)
+                                      background_traces=extend_plot)
 
 
 def get_plot_for_indices_of_current_dataset(indices, fps=30, number_consecutive_recordings=6, extend_plot=False):

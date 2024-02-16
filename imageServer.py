@@ -27,8 +27,8 @@ class RequestHandler(BaseHTTPRequestHandler):
 
                 # Generate or retrieve the image based on the parameter
                 extend_plot = False
-                # if query_params['extend-plot'][0] is "True":
-                #     extend_plot =True
+                if 'extend-plot' in query_params and str(query_params['extend-plot'][0]) == 'True':
+                    extend_plot =True
                 image_content = self.get_or_generate_image(generate_param, extend_plot)
 
                 # Specify the content type as image/jpeg
