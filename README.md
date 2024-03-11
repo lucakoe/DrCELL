@@ -12,8 +12,11 @@
 - start CELL
 	- `cd /path/to/CELL`
 	- `conda activate CELLenv`
-	- `bokeh serve .\main.py --port 5000` or `python startBokehServer.py`
-  - open [](http://localhost:5000)http://localhost:5000 in a browser 
+- open CELL in extra window
+ 	- `python startApplication.py`
+- alternativly open CELL in browser
+	- `python startBokehServer.py --port 5000` or `bokeh serve .\main.py --port 5000`
+  	- open [](http://localhost:5000)http://localhost:5000 in a browser 
 
 ## How to use:
 - Import your data in the format shown in main.py
