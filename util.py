@@ -252,6 +252,14 @@ def generate_umap(data, n_neighbors, min_dist, n_components=2, random_state=42):
     )
     return umap_object.fit_transform(data)
 
+def generate_umap_diagnostic_plot(data, n_neighbors, min_dist, n_components=2, random_state=42):
+    umap_object = umap.UMAP(
+        n_neighbors=n_neighbors,
+        min_dist=min_dist,
+        n_components=n_components,
+        random_state=random_state,
+    )
+    return plotting.generate_diagnostic_plots(umap_object, data)
 
 def generate_t_sne(data, perplexity=30, learning_rate=200, n_iter=1000, early_exaggeration=12, angle=0.5,
                    metric="euclidean", n_components=2):

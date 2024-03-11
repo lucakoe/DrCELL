@@ -76,6 +76,7 @@ def plot_bokeh(datas, additional_data, spike_plot_images_path, dump_files_paths,
         # Apply HDBSCAN clustering
         clusterer = hdbscan.HDBSCAN(min_cluster_size=5, min_samples=1)
         clusters = clusterer.fit_predict(temp_umap_out)
+        current_clusterer = clusterer
 
         data_frames[title] = pd.DataFrame(temp_umap_out, columns=['x', 'y'])
         # creates an index for merging
@@ -318,6 +319,7 @@ def plot_bokeh(datas, additional_data, spike_plot_images_path, dump_files_paths,
 
     cluster_parameters_title_div = Div(text="<h3>Cluster Parameters: </h3>", width=400, height=20)
     update_clusters_toggle = Checkbox(label="Update Clusters (experimental)", active=True)
+    hdbscan_diagnostic_plot_button=Button(label="HDBSCAN Diagnostic Plot")
     min_cluster_size_slider = Slider(title="min_cluster_size", start=1, end=50, step=1, value=5, disabled=False)
     min_samples_slider = Slider(title="min_sample", start=1, end=10, step=1, value=1, disabled=False)
     options_cluster_selection_method = ['eom', 'leaf']
@@ -332,7 +334,7 @@ def plot_bokeh(datas, additional_data, spike_plot_images_path, dump_files_paths,
     allow_single_linkage_toggle = Checkbox(label="Allow Single-Linkage", active=False)
     approximate_minimum_spanning_tree_toggle = Checkbox(label="Approximate Minimum Spanning Tree", active=True)
 
-    cluster_parameters_layout = column(cluster_parameters_title_div, blank_div, update_clusters_toggle,
+    cluster_parameters_layout = column(cluster_parameters_title_div, blank_div, update_clusters_toggle,hdbscan_diagnostic_plot_button,
                                        min_cluster_size_slider,
                                        min_samples_slider,
                                        cluster_selection_epsilon_slider,
@@ -489,6 +491,8 @@ def plot_bokeh(datas, additional_data, spike_plot_images_path, dump_files_paths,
                                             metric=select_metric.value,
                                             cluster_selection_epsilon=cluster_selection_epsilon_slider.value)
                 clusters = clusterer.fit_predict(umap_result)
+                nonlocal current_clusterer
+                current_clusterer=clusterer
 
             # Add cluster labels to your dataframe
             datasource_df['Cluster'] = clusters
@@ -699,6 +703,11 @@ def plot_bokeh(datas, additional_data, spike_plot_images_path, dump_files_paths,
         diagnostic_data = pca_operator.explained_variance_ratio_
         return_pca_diagnostic_plot(diagnostic_data).show()
 
+    def hdbscan_diagnostic_plot_button_callback():
+        nonlocal current_clusterer
+        current_clusterer.condensed_tree_.plot()
+        plt.show()
+        # TODO check if plots are accurate
     def buffer_parameters():
 
         def iterate_over_variables(variable_names, variables_values, current_combination=[]):
@@ -819,6 +828,7 @@ def plot_bokeh(datas, additional_data, spike_plot_images_path, dump_files_paths,
     select_cluster_slider.on_change('value_throttled', update_current_cluster)
 
     # Cluster Parameters
+    hdbscan_diagnostic_plot_button.on_click(hdbscan_diagnostic_plot_button_callback)
     update_clusters_toggle.on_change("active", update_graph)
     min_cluster_size_slider.on_change('value_throttled', update_graph)
     min_samples_slider.on_change('value_throttled', update_graph)

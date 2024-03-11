@@ -44,6 +44,7 @@ reduction_functions = {}
 # n_components has to be 2 in custom functions; first parameter has to be data!!!
 # TODO rename to nominal and continuous parameters
 reduction_functions["UMAP"] = {"function": util.generate_umap,
+                               "diagnostic_functions": {"diagnostic_plots": util.generate_umap_diagnostic_plot},
                                "numeric_parameters": {"n_neighbors": {"start": 2, "end": 50, "step": 1, "value": 20},
                                                       "min_dist": {"start": 0.00, "end": 1.0, "step": 0.01,
                                                                    "value": 0.0}},
@@ -51,6 +52,7 @@ reduction_functions["UMAP"] = {"function": util.generate_umap,
                                "select_parameters": {},
                                "constant_parameters": {"n_components": (2), "random_state": (42)}}
 reduction_functions["t-SNE"] = {"function": util.generate_t_sne,
+                                "diagnostic_functions": {},
                                 "numeric_parameters": {"perplexity": {"start": 5, "end": 50, "step": 1, "value": 30},
                                                        "learning_rate": {"start": 10, "end": 200, "step": 10,
                                                                          "value": 200},
@@ -65,6 +67,7 @@ reduction_functions["t-SNE"] = {"function": util.generate_t_sne,
                                 "constant_parameters": {"n_components": (2)}}
 
 reduction_functions["PHATE"] = {"function": util.generate_phate,
+                                "diagnostic_functions": {},
                                 "numeric_parameters": {"knn": {"start": 5, "end": 100, "step": 1, "value": 30},
                                                        "decay": {"start": 1, "end": 50, "step": 1,
                                                                  "value": 15},
