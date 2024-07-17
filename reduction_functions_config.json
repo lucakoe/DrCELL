@@ -1,0 +1,120 @@
+{
+    "UMAP": {
+        "numerical_parameters": {
+            "n_neighbors": {
+                "start": 2,
+                "end": 50,
+                "step": 1,
+                "value": 20
+            },
+            "min_dist": {
+                "start": 0.0,
+                "end": 1.0,
+                "step": 0.01,
+                "value": 0.0
+            }
+        },
+        "bool_parameters": {},
+        "nominal_parameters": {},
+        "constant_parameters": {
+            "n_components": 2,
+            "random_state": 42
+        }
+    },
+    "t-SNE": {
+        "numerical_parameters": {
+            "perplexity": {
+                "start": 5,
+                "end": 50,
+                "step": 1,
+                "value": 30
+            },
+            "learning_rate": {
+                "start": 10,
+                "end": 200,
+                "step": 10,
+                "value": 200
+            },
+            "n_iter": {
+                "start": 250,
+                "end": 1000,
+                "step": 10,
+                "value": 1000
+            },
+            "early_exaggeration": {
+                "start": 4,
+                "end": 20,
+                "step": 1,
+                "value": 12
+            },
+            "angle": {
+                "start": 0.2,
+                "end": 0.8,
+                "step": 0.1,
+                "value": 0.5
+            }
+        },
+        "bool_parameters": {},
+        "nominal_parameters": {
+            "metric": {
+                "options": [
+                    "euclidean",
+                    "manhattan",
+                    "cosine"
+                ],
+                "default_option": "euclidean"
+            }
+        },
+        "constant_parameters": {
+            "n_components": 2
+        }
+    },
+    "PHATE": {
+        "numerical_parameters": {
+            "knn": {
+                "start": 5,
+                "end": 100,
+                "step": 1,
+                "value": 30
+            },
+            "decay": {
+                "start": 1,
+                "end": 50,
+                "step": 1,
+                "value": 15
+            },
+            "t": {
+                "start": 5,
+                "end": 100,
+                "step": 1,
+                "value": 5
+            },
+            "gamma": {
+                "start": 0,
+                "end": 10,
+                "step": 0.1,
+                "value": 0
+            },
+            "n_pca": {
+                "start": 5,
+                "end": 100,
+                "step": 1,
+                "value": 100
+            },
+            "n_landmark": {
+                "start": 50,
+                "end": 1000,
+                "step": 10,
+                "value": 1000
+            }
+        },
+        "bool_parameters": {
+            "verbose": false
+        },
+        "nominal_parameters": {},
+        "constant_parameters": {
+            "n_components": 2,
+            "n_jobs": -1
+        }
+    }
+}

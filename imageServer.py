@@ -27,9 +27,20 @@ class RequestHandler(BaseHTTPRequestHandler):
 
                 # Generate or retrieve the image based on the parameter
                 extend_plot = False
+                pca_preprocessing = False
+                recording_type = "None"
                 if 'extend-plot' in query_params and str(query_params['extend-plot'][0]) == 'True':
-                    extend_plot =True
-                image_content = self.get_or_generate_image(generate_param, extend_plot)
+                    extend_plot = True
+
+                if 'pca-preprocessing' in query_params and str(query_params['pca-preprocessing'][0]) == 'True':
+                    pca_preprocessing = True
+
+                if 'recording-type' in query_params:
+                    recording_type = query_params['recording-type'][0]
+
+                image_content = self.get_or_generate_image(generate_param, extend_plot,
+                                                           pca_preprocessing=pca_preprocessing,
+                                                           recording_type=recording_type)
 
                 # Specify the content type as image/jpeg
                 self.send_response(200)
@@ -50,20 +61,21 @@ class RequestHandler(BaseHTTPRequestHandler):
         except Exception as e:
             self.send_error(500, 'Internal Server Error: {}'.format(str(e)))
 
-    def get_or_generate_image(self, parameter, extend_plot=False):
+    def get_or_generate_image(self, parameter, extend_plot=False, pca_preprocessing=False, recording_type=None):
         # Check if the image for the given parameter is already generated
         if parameter in self.image_cache:
-            return self.image_cache[parameter + str(extend_plot)]
+            return self.image_cache[parameter + str(extend_plot) + str(pca_preprocessing) + str(recording_type)]
 
         # Generate the image based on the parameter
-        image_content = self.generate_image(parameter, extend_plot)
+        image_content = self.generate_image(parameter, extend_plot, pca_preprocessing=pca_preprocessing,
+                                            recording_type=recording_type)
 
         # Cache the generated image
-        self.image_cache[parameter + str(extend_plot)] = image_content
+        self.image_cache[parameter + str(extend_plot) + str(pca_preprocessing) + str(recording_type)] = image_content
 
         return image_content
 
-    def generate_image(self, parameter, extend_plot):
+    def generate_image(self, parameter, extend_plot, pca_preprocessing=False, recording_type=None):
         # Split the parameter string into integers
         parameter = [int(x.strip()) for x in parameter.split(',')]
         # # Example: Generate a simple image with bars based on the parameter
@@ -88,8 +100,12 @@ class RequestHandler(BaseHTTPRequestHandler):
         # Save the image to a bytes buffer
         image_bytes = io.BytesIO()
         # Save the plot to the BytesIO object as a JPEG image
-        plt = plotting.get_plot_for_indices_of_current_dataset(parameter, fps=30, number_consecutive_recordings=6,
-                                                               extend_plot=extend_plot)
+        # TODO adjust pca plotting accordingly with correct axis etc.
+        # for alice 12 recordings and 10 fps
+        plt = plotting.get_plot_for_indices_of_current_dataset(parameter, fps=30, number_consecutive_recordings=1,
+                                                               extend_plot=extend_plot,
+                                                               pca_preprocessing=pca_preprocessing,
+                                                               recording_type=recording_type)
         plt.savefig(image_bytes, format='jpg')
         plt.close('all')
         image_content = image_bytes.getvalue()

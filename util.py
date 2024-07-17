@@ -5,6 +5,7 @@ import pandas as pd
 import scipy.io as sio
 import numpy as np
 import umap
+import socket
 import matplotlib.pyplot as plt
 import phate
 from decimal import Decimal
@@ -118,7 +119,7 @@ def get_dimensional_reduction_out(reduction_function_name, data, dump_path, redu
     return buffered_data_dump[param_key]
 
 
-def load_and_preprocess_data(c_file):
+def load_and_preprocess_data(c_file, dataset_type='2P'):
     # load data
     g = sio.loadmat(c_file)
     # g = h5py.File(cFile,'r')
@@ -127,7 +128,7 @@ def load_and_preprocess_data(c_file):
     Y = np.array(g['UMAPmatrix'])
     # Y = np.array(g['Y'])
     # Y = np.transpose(Y)
-    matrix_legend = np.array(g['matrixLegendArray'])
+
     # groups = np.array(g['redIdxAll'])
     # groups = np.reshape(groups,X.shape[0])
     # groups = groups.astype(int)
@@ -151,18 +152,43 @@ def load_and_preprocess_data(c_file):
 
     # Extract the 'UMAPmatrix' array from the loaded data and create a Pandas DataFrame from 'UMAPmatrix'
     umap_df = pd.DataFrame(g['UMAPmatrix'])
+    if dataset_type == '2P':
+        # Extract the 'matrixLegendArray' array from the loaded data and create a Pandas DataFrame from 'matrixLegendArray'
+        matrix_legend_df = pd.DataFrame(g['matrixLegendArray'],
+                                        columns=["Animal", "Recording", "Neuron", "NbFrames", "Task", "RedNeurons",
+                                                 "ChoiceAUCs", "IsChoiceSelect", "StimAUCs", "IsStimSelect"])
 
-    # Extract the 'matrixLegendArray' array from the loaded data and create a Pandas DataFrame from 'matrixLegendArray'
-    matrix_legend_df = pd.DataFrame(g['matrixLegendArray'],
-                                    columns=["Animal", "Recording", "Neuron", "NbFrames", "Task", "RedNeurons",
-                                             "ChoiceAUCs", "IsChoiceSelect", "StimAUCs", "IsStimSelect"])
+        # Convert the 'Task' column to integers
+        matrix_legend_df['Task'] = (matrix_legend_df['Task'].astype(int)).astype(str)
+        # Convert Float to Boolean
+        matrix_legend_df["IsStimSelect"] = matrix_legend_df["IsStimSelect"].apply(lambda x: x >= 1.0)
+        matrix_legend_df["IsChoiceSelect"] = matrix_legend_df["IsChoiceSelect"].apply(lambda x: x >= 1.0)
+        matrix_legend_df["RedNeurons"] = matrix_legend_df["RedNeurons"].apply(lambda x: x >= 1.0)
+    elif dataset_type == 'Ephys':
+        # Extract the 'matrixLegendArray' array from the loaded data and create a Pandas DataFrame from 'matrixLegendArray'
+        matrix_legend_df = pd.DataFrame(g['matrixLegend'],
+                                        columns=["Area", "Neuron", "ChoiceAUCsVisual", "ChoiceAUCsTactile",
+                                                 "ChoiceAUCsMultisensory", "IsChoiceSel", "IsChoiceSelVisual",
+                                                 "IsChoiceSelTactile", "IsChoiceSelMultisensory", "StimAUCsVisual",
+                                                 "StimAUCsTactile", "StimAUCsMultisensory", "IsStimSel",
+                                                 "IsStimSelVisual", "IsStimSelTactile", "IsStimSelMultisensory"])
 
-    # Convert the 'Task' column to integers
-    matrix_legend_df['Task'] = matrix_legend_df['Task'].astype(int)
-    # Convert Float to Boolean
-    matrix_legend_df["IsStimSelect"] = matrix_legend_df["IsStimSelect"].apply(lambda x: x >= 1.0)
-    matrix_legend_df["IsChoiceSelect"] = matrix_legend_df["IsChoiceSelect"].apply(lambda x: x >= 1.0)
-    matrix_legend_df["RedNeurons"] = matrix_legend_df["RedNeurons"].apply(lambda x: x >= 1.0)
+        # Convert the 'Task' column to integers
+        matrix_legend_df['Area'] = matrix_legend_df['Area'].astype(int)
+        brain_area_mapping = ["V1", "Superficial SC", "Deep SC", "ALM", "Between ALM and MM", "MM"]
+        matrix_legend_df['Area'] = matrix_legend_df['Area'].apply(lambda x: f'{brain_area_mapping[x - 1]}')
+
+        # Convert Float to Boolean
+        matrix_legend_df["IsStimSel"] = matrix_legend_df["IsStimSel"].apply(lambda x: x >= 1.0)
+        matrix_legend_df["IsChoiceSel"] = matrix_legend_df["IsChoiceSel"].apply(lambda x: x >= 1.0)
+        matrix_legend_df["IsChoiceSelVisual"] = matrix_legend_df["IsChoiceSelVisual"].apply(lambda x: x >= 1.0)
+        matrix_legend_df["IsChoiceSelTactile"] = matrix_legend_df["IsChoiceSelTactile"].apply(lambda x: x >= 1.0)
+        matrix_legend_df["IsChoiceSelMultisensory"] = matrix_legend_df["IsChoiceSelMultisensory"].apply(
+            lambda x: x >= 1.0)
+        matrix_legend_df["IsStimSel"] = matrix_legend_df["IsStimSel"].apply(lambda x: x >= 1.0)
+        matrix_legend_df["IsStimSelVisual"] = matrix_legend_df["IsStimSelVisual"].apply(lambda x: x >= 1.0)
+        matrix_legend_df["IsStimSelTactile"] = matrix_legend_df["IsStimSelTactile"].apply(lambda x: x >= 1.0)
+        matrix_legend_df["IsStimSelMultisensory"] = matrix_legend_df["IsStimSelMultisensory"].apply(lambda x: x >= 1.0)
 
     use_idx = np.invert(np.isnan(np.sum(Y, axis=0)))
     Y = Y[:, use_idx]
@@ -252,6 +278,7 @@ def generate_umap(data, n_neighbors, min_dist, n_components=2, random_state=42):
     )
     return umap_object.fit_transform(data)
 
+
 def generate_umap_diagnostic_plot(data, n_neighbors, min_dist, n_components=2, random_state=42):
     umap_object = umap.UMAP(
         n_neighbors=n_neighbors,
@@ -260,6 +287,7 @@ def generate_umap_diagnostic_plot(data, n_neighbors, min_dist, n_components=2, r
         random_state=random_state,
     )
     return plotting.generate_diagnostic_plots(umap_object, data)
+
 
 def generate_t_sne(data, perplexity=30, learning_rate=200, n_iter=1000, early_exaggeration=12, angle=0.5,
                    metric="euclidean", n_components=2):
@@ -276,3 +304,8 @@ def generate_phate(data, knn=30, decay=15, t='auto', gamma=0, n_jobs=-1, n_pca=1
                               verbose=verbose, n_components=n_components)
 
     return phate_operator.fit_transform(data)
+
+
+def is_port_available(port):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        return s.connect_ex(('localhost', port)) != 0

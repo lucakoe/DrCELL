@@ -23,6 +23,7 @@ import imageServer
 import util
 
 current_dataset = None
+current_pca_preprocessed_dataset = None
 
 
 def generate_diagnostic_plots(umap_object, data):
@@ -37,11 +38,14 @@ def generate_diagnostic_plots(umap_object, data):
     plt.show()
 
 
-def plot_bokeh(datas, additional_data, spike_plot_images_path, dump_files_paths, titles=None, reduction_functions=None,
+def plot_bokeh(datas, additional_data, dump_files_paths, titles=None, recording_types=None, reduction_functions=None,
                bokeh_show=True,
                start_dropdown_data_option="all", output_file_path="./data/output/", data_variables=None,
                display_hover_variables=None, debug=False, experimental=False, hover_image_generation_function=None,
                color_palette=Muted9, image_server_port=8000):
+    if recording_types is None:
+        for title in titles:
+            recording_types[title] = "None"
     if reduction_functions is None:
         reduction_functions = {"UMAP": (
             util.generate_umap, {"n_neighbors": (2, 50, 1, 20), "min_dist": (0.00, 1.0, 0.01, 0.0)}, {}, {},
@@ -56,9 +60,8 @@ def plot_bokeh(datas, additional_data, spike_plot_images_path, dump_files_paths,
     elif not ("all" in titles):
         titles.insert(0, "all")
     print("Loading Bokeh Plotting Interface")
-    images_path = spike_plot_images_path
 
-    httpd_image_server = imageServer.start_server(8000)
+    httpd_image_server = imageServer.start_server(image_server_port)
 
     data_frames = {}
     for title in titles:
@@ -83,7 +86,6 @@ def plot_bokeh(datas, additional_data, spike_plot_images_path, dump_files_paths,
         data_frames[title].index = range(len(data_frames[title]))
         additional_data[title].index = range(len(additional_data[title]))
         data_frames[title] = data_frames[title].merge(additional_data[title], left_index=True, right_index=True)
-        data_frames[title]['Task'] = data_frames[title]['Task'].astype(str)
         # Add cluster labels to your dataframe
         data_frames[title]['Cluster'] = clusters
 
@@ -93,6 +95,7 @@ def plot_bokeh(datas, additional_data, spike_plot_images_path, dump_files_paths,
         data_frames[title]['alpha'] = 1.0
         data_frames[title]['ColorMappingCategory'] = 1.0
         data_frames[title]['Cluster'] = -1
+        data_frames[title]['recordingType'] = recording_types[title]
 
     datasource_df = pd.DataFrame.copy(data_frames[start_dropdown_data_option])
     update_cluster_toggle_df = pd.DataFrame.copy(datasource_df)
@@ -162,7 +165,7 @@ def plot_bokeh(datas, additional_data, spike_plot_images_path, dump_files_paths,
 
         <div>
             <img
-                src="http://localhost:""" + str(image_server_port) + """/?generate=""" + """@{pdIndex}" height="100" alt="Image"
+                src="http://localhost:""" + str(image_server_port) + """/?generate=""" + """@{pdIndex} &recording-type=@{recordingType}" height="100" alt="Image"
                 style="float: left; margin: 0px 15px 15px 0px;"
                 border="1"
             />
@@ -171,30 +174,37 @@ def plot_bokeh(datas, additional_data, spike_plot_images_path, dump_files_paths,
         
     """, renderers=[scatter_plot])
 
-    scatter_plot_cluster_hover_tool = HoverTool(tooltips="""
+    scatter_plot_pca_preprocessing_hover_tool = HoverTool(tooltips=f"""
+        <div>
+            {hover_variable_string}
+        </div>
 
         <div>
-            <span style='font-size: 8px'>@{Cluster}</span>
+            <img
+                src="http://localhost:""" + str(image_server_port) + """/?generate=""" + """@{pdIndex}&pca-preprocessing=True" height="100" alt="Image"
+                style="float: left; margin: 0px 15px 15px 0px;"
+                border="1"
+            />
         </div>
 
 
     """, renderers=[scatter_plot])
 
-    grid_plot_hover_tool = HoverTool(tooltips="""
+    grid_plot_hover_tool = HoverTool(name="Grid Median Hovertool", tooltips="""
     <div>
         <span style='font-size: 8px; color: #224499'>Grid ID:</span>\n
         <span style='font-size: 8px'>@{gridID}</span>\n """ +
-                                              #                                               """
-                                              #         <span style='font-size: 8px; color: #224499'>Grid Point Indices:</span>\n
-                                              #         <span style='font-size: 8px'>@{pointIndices}</span>\n
-                                              #         <span style='font-size: 8px; color: #224499'>Grid Point Neurons:</span>\n
-                                              #         <span style='font-size: 8px'>@{pointNeurons}</span>\n
-                                              # """
-                                              #                                               +
-                                              """
-    </div>
-        <img
-            src="http://localhost:""" + str(image_server_port) + """/?generate=""" + """@{pointIndices}&extend-plot=True" height="100" alt="Image"
+                                                                            #                                               """
+                                                                            #         <span style='font-size: 8px; color: #224499'>Grid Point Indices:</span>\n
+                                                                            #         <span style='font-size: 8px'>@{pointIndices}</span>\n
+                                                                            #         <span style='font-size: 8px; color: #224499'>Grid Point Neurons:</span>\n
+                                                                            #         <span style='font-size: 8px'>@{pointNeurons}</span>\n
+                                                                            # """
+                                                                            #                                               +
+                                                                            """
+                                  </div>
+                                      <img
+                                          src="http://localhost:""" + str(image_server_port) + """/?generate=""" + """@{pointIndices}&extend-plot=True" height="100" alt="Image"
             style="float: left; margin: 0px 15px 15px 0px;"
             border="1"
         />
@@ -204,8 +214,8 @@ def plot_bokeh(datas, additional_data, spike_plot_images_path, dump_files_paths,
 
     # Add a HoverTool to display the Matplotlib plot when hovering over a data point
     plot_figure.add_tools(scatter_plot_hover_tool)
-    plot_figure.add_tools(scatter_plot_cluster_hover_tool)
     plot_figure.add_tools(grid_plot_hover_tool)
+    plot_figure.add_tools(scatter_plot_pca_preprocessing_hover_tool)
 
     # Create an empty line Div for spacing
     blank_div = Div(text="<br>", width=400, height=5)
@@ -264,7 +274,8 @@ def plot_bokeh(datas, additional_data, spike_plot_images_path, dump_files_paths,
 
     enable_pca_checkbox = Checkbox(label="Enable PCA Preprocessing", active=False)
     select_pca_dimensions_slider = Slider(title="PCA n_components", start=1,
-                                          end=datas[start_dropdown_data_option].shape[1], step=1,
+                                          end=min(datas[start_dropdown_data_option].shape[0],
+                                                  datas[start_dropdown_data_option].shape[1]), step=1,
                                           value=2,
                                           disabled=True)
     pca_diagnostic_plot_button = Button(label="PCA Diagnostic Plot")
@@ -272,7 +283,7 @@ def plot_bokeh(datas, additional_data, spike_plot_images_path, dump_files_paths,
                                       select_pca_dimensions_slider, pca_diagnostic_plot_button)
 
     # Dimensional Reduction
-    dimensional_reduction_title_div = Div(text="<h3>Dimensional Reduction Parameters: </h3>", width=400, height=20)
+    dimensional_reduction_title_div = Div(text="<h3>Dimensional Reduction: </h3>", width=400, height=20)
     buffer_parameters_button = Button(label="Buffer Dimensional Reduction in Parameter Range")
     buffer_parameters_status = Div(text=" ", width=400, height=20)
     options_select_dimensional_reduction = ["None"]
@@ -286,12 +297,19 @@ def plot_bokeh(datas, additional_data, spike_plot_images_path, dump_files_paths,
     for reduction_function in reduction_functions.keys():
         reduction_functions_layouts[reduction_function] = column()
         reduction_functions_widgets[reduction_function] = {}
-        for numeric_parameter in reduction_functions[reduction_function]["numeric_parameters"].keys():
-            parameter_range = reduction_functions[reduction_function]["numeric_parameters"][numeric_parameter]
-            reduction_functions_widgets[reduction_function][numeric_parameter] = Slider(title=numeric_parameter,
-                                                                                        **parameter_range)
+
+        # TODO exchange hardcoded feature with generalized diagnostic plot feature
+        if reduction_function == "UMAP":
+            reduction_functions_widgets[reduction_function]["diagnostic_plots"] = Button(label="Diagnostic Plots")
             reduction_functions_layouts[reduction_function].children.append(
-                reduction_functions_widgets[reduction_function][numeric_parameter])
+                reduction_functions_widgets[reduction_function]["diagnostic_plots"])
+
+        for numerical_parameter in reduction_functions[reduction_function]["numerical_parameters"].keys():
+            parameter_range = reduction_functions[reduction_function]["numerical_parameters"][numerical_parameter]
+            reduction_functions_widgets[reduction_function][numerical_parameter] = Slider(title=numerical_parameter,
+                                                                                          **parameter_range)
+            reduction_functions_layouts[reduction_function].children.append(
+                reduction_functions_widgets[reduction_function][numerical_parameter])
 
         for bool_parameter in reduction_functions[reduction_function]["bool_parameters"].keys():
             reduction_functions_widgets[reduction_function][bool_parameter] = Checkbox(label=bool_parameter, active=
@@ -299,15 +317,15 @@ def plot_bokeh(datas, additional_data, spike_plot_images_path, dump_files_paths,
             reduction_functions_layouts[reduction_function].children.append(
                 reduction_functions_widgets[reduction_function][bool_parameter])
 
-        for selection_parameter in reduction_functions[reduction_function]["select_parameters"].keys():
-            selection_parameters_options = \
-                reduction_functions[reduction_function]["select_parameters"][selection_parameter]["options"]
-            selection_parameters_default_option = \
-                reduction_functions[reduction_function]["select_parameters"][selection_parameter]["default_option"]
-            reduction_functions_widgets[reduction_function][selection_parameter] = Select(
-                value=selection_parameters_default_option, options=selection_parameters_options)
+        for nominal_parameter in reduction_functions[reduction_function]["nominal_parameters"].keys():
+            nominal_parameters_options = \
+                reduction_functions[reduction_function]["nominal_parameters"][nominal_parameter]["options"]
+            nominal_parameters_default_option = \
+                reduction_functions[reduction_function]["nominal_parameters"][nominal_parameter]["default_option"]
+            reduction_functions_widgets[reduction_function][nominal_parameter] = Select(
+                value=nominal_parameters_default_option, options=nominal_parameters_options)
             reduction_functions_layouts[reduction_function].children.append(
-                reduction_functions_widgets[reduction_function][selection_parameter])
+                reduction_functions_widgets[reduction_function][nominal_parameter])
 
         dimensional_reduction_parameter_layouts.children.append(reduction_functions_layouts[reduction_function])
 
@@ -319,7 +337,7 @@ def plot_bokeh(datas, additional_data, spike_plot_images_path, dump_files_paths,
 
     cluster_parameters_title_div = Div(text="<h3>Cluster Parameters: </h3>", width=400, height=20)
     update_clusters_toggle = Checkbox(label="Update Clusters (experimental)", active=True)
-    hdbscan_diagnostic_plot_button=Button(label="HDBSCAN Diagnostic Plot")
+    hdbscan_diagnostic_plot_button = Button(label="HDBSCAN Diagnostic Plot")
     min_cluster_size_slider = Slider(title="min_cluster_size", start=1, end=50, step=1, value=5, disabled=False)
     min_samples_slider = Slider(title="min_sample", start=1, end=10, step=1, value=1, disabled=False)
     options_cluster_selection_method = ['eom', 'leaf']
@@ -334,7 +352,8 @@ def plot_bokeh(datas, additional_data, spike_plot_images_path, dump_files_paths,
     allow_single_linkage_toggle = Checkbox(label="Allow Single-Linkage", active=False)
     approximate_minimum_spanning_tree_toggle = Checkbox(label="Approximate Minimum Spanning Tree", active=True)
 
-    cluster_parameters_layout = column(cluster_parameters_title_div, blank_div, update_clusters_toggle,hdbscan_diagnostic_plot_button,
+    cluster_parameters_layout = column(cluster_parameters_title_div, blank_div, update_clusters_toggle,
+                                       hdbscan_diagnostic_plot_button,
                                        min_cluster_size_slider,
                                        min_samples_slider,
                                        cluster_selection_epsilon_slider,
@@ -344,7 +363,7 @@ def plot_bokeh(datas, additional_data, spike_plot_images_path, dump_files_paths,
 
     # Cluster Selection
     # TODO fix Cluster Selection bug
-    cluster_selection_title_div = Div(text="<h3>Cluster Selection: </h3>", width=400, height=20)
+    cluster_selection_title_div = Div(text="<h3>Highlight Cluster: </h3>", width=400, height=20)
 
     highlight_cluster_checkbox = Checkbox(label="Highlight Cluster", active=False)
     selected_cluster_text_input = TextInput(value="0", title="Cluster:", disabled=True)
@@ -356,7 +375,8 @@ def plot_bokeh(datas, additional_data, spike_plot_images_path, dump_files_paths,
                                       selected_cluster_text_input,
                                       select_cluster_slider)
 
-    main_layout_title_div = Div(text="<h2>Cluster Exploration and Labeling Library: </h2>", width=800, height=20)
+    main_layout_title_div = Div(text="<h2>Dimensional reduction Cluster Exploration and Labeling Library: </h2>",
+                                width=800, height=20)
 
     main_layout_row = row(general_layout,
                           column(pca_preprocessing_layout, dimensional_reduction_layout),
@@ -371,7 +391,7 @@ def plot_bokeh(datas, additional_data, spike_plot_images_path, dump_files_paths,
         out = {}
         reduction_function = select_dimensional_reduction.value
         if reduction_function != 'None':
-            for numeric_parameter in reduction_functions[reduction_function]["numeric_parameters"].keys():
+            for numeric_parameter in reduction_functions[reduction_function]["numerical_parameters"].keys():
                 value = reduction_functions_widgets[reduction_function][numeric_parameter].value
                 if type(value) == float:
                     # rounds the value to the same amount of numbers behind the decimal point as the step of the slider.
@@ -383,8 +403,8 @@ def plot_bokeh(datas, additional_data, spike_plot_images_path, dump_files_paths,
             for bool_parameter in reduction_functions[reduction_function]["bool_parameters"].keys():
                 out[bool_parameter] = reduction_functions_widgets[reduction_function][bool_parameter].active
 
-            for selection_parameter in reduction_functions[reduction_function]["select_parameters"].keys():
-                out[selection_parameter] = reduction_functions_widgets[reduction_function][selection_parameter].value
+            for nominal_parameter in reduction_functions[reduction_function]["nominal_parameters"].keys():
+                out[nominal_parameter] = reduction_functions_widgets[reduction_function][nominal_parameter].value
 
             for constant_parameter in reduction_functions[reduction_function]["constant_parameters"].keys():
                 out[constant_parameter] = reduction_functions[reduction_function]["constant_parameters"][
@@ -395,8 +415,11 @@ def plot_bokeh(datas, additional_data, spike_plot_images_path, dump_files_paths,
     # Callback function to update graph when sliders change
     def update_graph(attr, old, new):
         nonlocal datasource_df, update_cluster_toggle_df, current_cluster
+        global current_pca_preprocessed_dataset
         # Resets to initial state
         datasource_df = pd.DataFrame.copy(data_frames[select_data.value])
+        select_pca_dimensions_slider.end = min(datas[select_data.value].shape[0],
+                                               datas[start_dropdown_data_option].shape[1])
         # TODO fix Update Cluster
         # TODO if changing dataset, reset option to activate update cluster checkbox again
 
@@ -419,6 +442,8 @@ def plot_bokeh(datas, additional_data, spike_plot_images_path, dump_files_paths,
         print(get_current_dimension_reduction_parameters())
 
         if enable_pca_checkbox.active or select_dimensional_reduction.value == "None":
+            if scatter_plot_pca_preprocessing_hover_tool not in plot_figure.tools:
+                plot_figure.add_tools(scatter_plot_pca_preprocessing_hover_tool)
             # this is to prevent the pca settings to be used if there is no dimensional reduction selected, so the data still gets reduced to 2 dimensions
             if select_dimensional_reduction.value == "None":
                 enable_pca_checkbox.active = True
@@ -429,6 +454,8 @@ def plot_bokeh(datas, additional_data, spike_plot_images_path, dump_files_paths,
                 enable_pca_checkbox.disabled = False
                 select_pca_dimensions_slider.disabled = False
             pca_diagnostic_plot_button.disabled = False
+            current_pca_preprocessed_dataset = util.apply_pca_preprocessing(current_data, n_components=int(
+                select_pca_dimensions_slider.value))
             umap_result = util.get_dimensional_reduction_out(select_dimensional_reduction.value, current_data,
                                                              dump_path=os.path.abspath(
                                                                  dump_files_paths[select_data.value]).replace("\\",
@@ -440,6 +467,9 @@ def plot_bokeh(datas, additional_data, spike_plot_images_path, dump_files_paths,
         else:
             select_pca_dimensions_slider.disabled = True
             pca_diagnostic_plot_button.disabled = True
+            if scatter_plot_pca_preprocessing_hover_tool in plot_figure.tools:
+                plot_figure.remove_tools(scatter_plot_pca_preprocessing_hover_tool)
+            current_pca_preprocessed_dataset = None
             umap_result = util.get_dimensional_reduction_out(select_dimensional_reduction.value, current_data,
                                                              dump_path=os.path.abspath(
                                                                  dump_files_paths[select_data.value]).replace("\\",
@@ -492,7 +522,7 @@ def plot_bokeh(datas, additional_data, spike_plot_images_path, dump_files_paths,
                                             cluster_selection_epsilon=cluster_selection_epsilon_slider.value)
                 clusters = clusterer.fit_predict(umap_result)
                 nonlocal current_clusterer
-                current_clusterer=clusterer
+                current_clusterer = clusterer
 
             # Add cluster labels to your dataframe
             datasource_df['Cluster'] = clusters
@@ -661,12 +691,16 @@ def plot_bokeh(datas, additional_data, spike_plot_images_path, dump_files_paths,
             percentage = round((clustered_count / len(datasource_df)) * 100, 2)
             cluster_number = len(np.unique(datasource_df['Cluster'])) - 1
 
+        if current_dataset is not None:
+            dimensions_input_data_length = current_dataset.shape[1]
+        else:
+            dimensions_input_data_length = "N/A"
         print(
-            f"Data: {select_data.value}, 'AND' Filter: {and_filter_multi_choice.value}, 'OR' Filter: {or_filter_multi_choice.value}, Length: {len(datasource_df)}")
+            f"Data: {select_data.value}, 'AND' Filter: {and_filter_multi_choice.value}, 'OR' Filter: {or_filter_multi_choice.value}, Datapoints: {len(datasource_df)}, Dimensions input data: {dimensions_input_data_length}")
         print(
             f"Clusters: {cluster_number}, Clustered: {percentage}%, Clustered/Unclustered Ratio: {ratio}, Clustered: {clustered_count}, Unclustered: {unclustered_count}"
         )
-        stats_div.text = f"Data Length: {len(datasource_df)} <br> Clusters: {cluster_number} <br> Clustered: {percentage}% <br> Clustered/Unclustered Ratio: {ratio} <br> Clustered: {clustered_count} <br> Unclustered: {unclustered_count}"
+        stats_div.text = f"Data Points: {len(datasource_df)} <br> Dimensions input data: {dimensions_input_data_length} <br> Clusters: {cluster_number} <br> Clustered: {percentage}% <br> Clustered/Unclustered Ratio: {ratio} <br> Clustered: {clustered_count} <br> Unclustered: {unclustered_count} "
 
     def export_data():
         nonlocal output_file_path
@@ -707,7 +741,20 @@ def plot_bokeh(datas, additional_data, spike_plot_images_path, dump_files_paths,
         nonlocal current_clusterer
         current_clusterer.condensed_tree_.plot()
         plt.show()
-        # TODO check if plots are accurate
+        current_clusterer.single_linkage_tree_.plot()
+        plt.show()
+        # clusterer.minimum_spanning_tree_.plot(edge_cmap='viridis',
+        #                                       edge_alpha=0.6,
+        #                                       node_size=80,
+        #                                       edge_linewidth=2)
+        # plt.show()
+
+    def umap_diagnostic_plot_button_callback():
+        global current_dataset
+        parm = get_current_dimension_reduction_parameters()
+        parm["data"] = current_dataset
+        util.generate_umap_diagnostic_plot(**parm)
+
     def buffer_parameters():
 
         def iterate_over_variables(variable_names, variables_values, current_combination=[]):
@@ -754,9 +801,9 @@ def plot_bokeh(datas, additional_data, spike_plot_images_path, dump_files_paths,
             variable_values = []
             reduction_function = select_dimensional_reduction.value
             for parameter_type in reduction_functions[reduction_function].keys():
-                if parameter_type == "numeric_parameters":
-                    for variable_name in reduction_functions[reduction_function]["numeric_parameters"].keys():
-                        parameter_range = reduction_functions[reduction_function]["numeric_parameters"][
+                if parameter_type == "numerical_parameters":
+                    for variable_name in reduction_functions[reduction_function]["numerical_parameters"].keys():
+                        parameter_range = reduction_functions[reduction_function]["numerical_parameters"][
                             variable_name].copy()
                         parameter_range.pop('value')
                         # rename key end to stop
@@ -774,10 +821,10 @@ def plot_bokeh(datas, additional_data, spike_plot_images_path, dump_files_paths,
                         variable_values.append([False, True])
                         variable_names.append(variable_name)
 
-                elif parameter_type == "select_parameters":
-                    for variable_name in reduction_functions[reduction_function]["select_parameters"].keys():
+                elif parameter_type == "nominal_parameters":
+                    for variable_name in reduction_functions[reduction_function]["nominal_parameters"].keys():
                         variable_values.append(
-                            reduction_functions[reduction_function]["select_parameters"][variable_name][
+                            reduction_functions[reduction_function]["nominal_parameters"][variable_name][
                                 "options"].copy())
                         variable_names.append(variable_name)
 
@@ -814,13 +861,16 @@ def plot_bokeh(datas, additional_data, spike_plot_images_path, dump_files_paths,
     buffer_parameters_button.on_click(buffer_parameters)
     # assign the callback function for every parameter
     for reduction_function in reduction_functions.keys():
-        for numeric_parameter in reduction_functions[reduction_function]["numeric_parameters"].keys():
-            reduction_functions_widgets[reduction_function][numeric_parameter].on_change('value_throttled',
-                                                                                         update_graph)
+        if reduction_function == "UMAP":
+            reduction_functions_widgets[reduction_function]["diagnostic_plots"].on_click(
+                umap_diagnostic_plot_button_callback)
+        for numerical_parameter in reduction_functions[reduction_function]["numerical_parameters"].keys():
+            reduction_functions_widgets[reduction_function][numerical_parameter].on_change('value_throttled',
+                                                                                           update_graph)
         for bool_parameter in reduction_functions[reduction_function]["bool_parameters"].keys():
             reduction_functions_widgets[reduction_function][bool_parameter].on_change("active", update_graph)
-        for selection_parameter in reduction_functions[reduction_function]["select_parameters"].keys():
-            reduction_functions_widgets[reduction_function][selection_parameter].on_change('value', update_graph)
+        for nominal_parameter in reduction_functions[reduction_function]["nominal_parameters"].keys():
+            reduction_functions_widgets[reduction_function][nominal_parameter].on_change('value', update_graph)
 
     # Cluster Selection
     highlight_cluster_checkbox.on_change('active', update_current_cluster)
@@ -854,12 +904,12 @@ def plot_bokeh(datas, additional_data, spike_plot_images_path, dump_files_paths,
     else:
         # for Bokeh Server
         curdoc().add_root(layout)
+    update_stats()
     print("Finished loading Bokeh Plotting Interface")
 
 
-def plot_and_return_spikes(trace_data_arrays, indices, fps=30, number_consecutive_recordings=6,
-                           background_traces=False):
-
+def plot_and_return_spikes(trace_data_arrays, indices, fps=30, number_consecutive_recordings=1,
+                           background_traces=False, recording_type=None):
     """Plot spike times: if one array in fluorescence_arrays, then raw data is plotted if multiple arrays in fluorescence_arrays, then median gets plotted.
 
     Parameters
@@ -883,7 +933,6 @@ def plot_and_return_spikes(trace_data_arrays, indices, fps=30, number_consecutiv
 
     """
 
-
     # Calculate time values based on the frame rate per second
     n = trace_data_arrays.shape[1]
     time_values = np.arange(n) / fps
@@ -894,17 +943,34 @@ def plot_and_return_spikes(trace_data_arrays, indices, fps=30, number_consecutiv
     # takes just the arrays with corresponding indices
     selected_arrays = trace_data_arrays[indices]
     # makes median over all
-
     median_selected_arrays = np.median(selected_arrays, axis=0)
 
-    if background_traces:
-        for selected_fluorescence_array in selected_arrays:
-            plt.plot(time_values, selected_fluorescence_array, linestyle='-', color='gray', alpha=0.3)
-
-    plt.plot(time_values, median_selected_arrays, linestyle='-')
     plt.xlabel('Time (s)')
-    plt.ylabel('Fluorescence Intensity')
-    plt.title('Fluorescence Intensity vs. Time')
+
+    if recording_type == "Ephys":
+        plt.ylabel('Firing rate (spikes/s)')
+        plt.title('Firing rate vs. Time')
+        if background_traces:
+            for selected_fluorescence_array in selected_arrays:
+                plt.plot(time_values, selected_fluorescence_array, linestyle='-', color='gray', alpha=0.3)
+
+        plt.plot(time_values, median_selected_arrays, linestyle='-')
+    elif recording_type == "2P":
+        plt.ylabel('Fluorescence Intensity')
+        plt.title('Fluorescence Intensity vs. Time')
+        if background_traces:
+            for selected_fluorescence_array in selected_arrays:
+                plt.plot(time_values, selected_fluorescence_array, linestyle='-', color='gray', alpha=0.3)
+
+        plt.plot(time_values, median_selected_arrays, linestyle='-')
+    else:
+        plt.ylabel('Dimension y-Axis')
+        plt.title('Original data')
+        if background_traces:
+            for selected_fluorescence_array in selected_arrays:
+                plt.plot(range(n), selected_fluorescence_array, linestyle='-', color='gray', alpha=0.3)
+
+        plt.plot(range(n), median_selected_arrays, linestyle='-')
     plt.grid(True)
 
     # Add vertical lines at specific x-coordinates (assuming they have the same recording length)
@@ -918,8 +984,58 @@ def plot_and_return_spikes(trace_data_arrays, indices, fps=30, number_consecutiv
     return plt
 
 
-def get_plot_for_indices(fluorescence_arrays, indices, fps=30, number_consecutive_recordings=6, extend_plot=False):
-    if fluorescence_arrays is None or indices is None:
+def plot_and_return_pca_plot(data_arrays, indices, background_traces=False):
+    """Plot spike times: if one array in fluorescence_arrays, then raw data is plotted if multiple arrays in fluorescence_arrays, then median gets plotted.
+
+    Parameters
+    ----------
+    data_arrays : np.ndarray
+        2-dimensional array with trace data
+    indices : list
+        list of indices of traces to be plotted from the pca preprocessed fluorescence_arrays
+    background_traces : boolean
+        if True plots the raw traces of the selected indices gray in the background (applies only with multiple traces)
+
+    Returns
+    -------
+    matplotlib.pyplot
+        plot of pca plot
+
+
+    """
+
+    # Calculate time values based on the frame rate per second
+    n = data_arrays.shape[1]
+    pca_components = np.arange(n)
+
+    # Plot intensity against time
+    plt.figure(figsize=(10, 4))  # Adjust the figure size as needed
+
+    # takes just the arrays with corresponding indices
+    selected_arrays = data_arrays[indices]
+    # makes median over all
+
+    median_selected_arrays = np.median(selected_arrays, axis=0)
+
+    if background_traces:
+        for selected_fluorescence_array in selected_arrays:
+            plt.plot(pca_components, selected_fluorescence_array, linestyle='-', color='gray', alpha=0.3)
+
+    plt.plot(pca_components, median_selected_arrays, linestyle='-', color='red')
+    plt.xlabel('PCA Component')
+    plt.ylabel('Value')
+    plt.title('Plot of Values of PCA Components')
+    plt.grid(True)
+
+    # Show the plot
+    # plt.show()
+
+    return plt
+
+
+def get_plot_for_indices(trace_arrays, indices, fps=30, number_consecutive_recordings=1, extend_plot=False,
+                         recording_type=None):
+    if trace_arrays is None or indices is None:
         print("No image to plot")
         # Create a figure with a black background
         fig = plt.figure(facecolor='black')
@@ -929,15 +1045,38 @@ def get_plot_for_indices(fluorescence_arrays, indices, fps=30, number_consecutiv
         ax.axis('off')
         return plt
     else:
-        return plot_and_return_spikes(fluorescence_arrays, indices, fps=fps,
+        return plot_and_return_spikes(trace_arrays, indices, fps=fps,
                                       number_consecutive_recordings=number_consecutive_recordings,
-                                      background_traces=extend_plot)
+                                      background_traces=extend_plot, recording_type=recording_type)
 
 
-def get_plot_for_indices_of_current_dataset(indices, fps=30, number_consecutive_recordings=6, extend_plot=False):
-    global current_dataset
-    return get_plot_for_indices(current_dataset, indices, fps=fps,
-                                number_consecutive_recordings=number_consecutive_recordings, extend_plot=extend_plot)
+def get_pca_plot_for_indices(trace_arrays, indices, extend_plot=False):
+    if trace_arrays is None or indices is None:
+        print("No image to plot")
+        # Create a figure with a black background
+        fig = plt.figure(facecolor='black')
+        ax = fig.add_subplot(111, facecolor='black')
+
+        # Hide axis and grid lines
+        ax.axis('off')
+        return plt
+    else:
+        return plot_and_return_pca_plot(trace_arrays, indices, background_traces=extend_plot)
+
+
+def get_plot_for_indices_of_current_dataset(indices, fps=30, number_consecutive_recordings=1, extend_plot=False,
+                                            pca_preprocessing=False, recording_type=None):
+    global current_dataset, current_pca_preprocessed_dataset
+    dataset = current_dataset
+    if pca_preprocessing:
+        dataset = current_pca_preprocessed_dataset
+        return get_pca_plot_for_indices(dataset, indices,
+                                        extend_plot=extend_plot)
+
+        # TODO adjust pca plotting accordingly with correct axis etc.
+    return get_plot_for_indices(dataset, indices, fps=fps,
+                                number_consecutive_recordings=number_consecutive_recordings, extend_plot=extend_plot,
+                                recording_type=recording_type)
 
 
 def update_current_dataset(dataset):
@@ -980,7 +1119,7 @@ def return_pca_diagnostic_plot(diagnostic_data):
 
     # Add labels and title
     ax.set_xlabel('Components')
-    ax.set_ylabel('Correlation')
+    ax.set_ylabel('Explained Variance')
     ax.set_title('PCA Diagnostic Plot')
     ax.legend()
 
