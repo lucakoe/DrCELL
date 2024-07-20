@@ -1,23 +1,23 @@
-import base64
-import random
-import hdbscan
 import datetime
-import numpy as np
+import io
+import json
+import os
+import random
+
+import hdbscan
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 import scipy
 import sklearn.decomposition  # PCA
 import umap.plot
-from PIL import Image
 from bokeh.events import Tap
 from bokeh.io import curdoc
 from bokeh.layouts import column, row
-from bokeh.plotting import figure, show, output_notebook
-from bokeh.models import HoverTool, ColumnDataSource, CategoricalColorMapper, CustomJS, Slider, Select, Checkbox, \
-    MultiChoice, ColorBar, TextInput, CustomAction, TapTool, CheckboxGroup, RadioGroup, Div, Button
+from bokeh.models import HoverTool, ColumnDataSource, CategoricalColorMapper, Slider, Select, Checkbox, \
+    MultiChoice, ColorBar, TextInput, RadioGroup, Div, Button
 from bokeh.palettes import Muted9
-import io
-import os
+from bokeh.plotting import figure, show
 
 import imageServer
 import util
@@ -38,40 +38,70 @@ def generate_diagnostic_plots(umap_object, data):
     plt.show()
 
 
-def plot_bokeh(datas, additional_data, dump_files_paths, titles=None, recording_types=None, reduction_functions=None,
-               bokeh_show=True,
-               start_dropdown_data_option="all", output_file_path="./data/output/", data_variables=None,
-               display_hover_variables=None, debug=False, experimental=False, hover_image_generation_function=None,
+def plot_bokeh(input_file_paths, reduction_functions=None,
+               bokeh_show=True, output_path="./data/output/", debug=False, experimental=False,
+               hover_image_generation_function=None,
                color_palette=Muted9, image_server_port=8000):
-    if recording_types is None:
-        for title in titles:
-            recording_types[title] = "None"
+    print("Starting DrCELL")
     if reduction_functions is None:
-        reduction_functions = {"UMAP": (
-            util.generate_umap, {"n_neighbors": (2, 50, 1, 20), "min_dist": (0.00, 1.0, 0.01, 0.0)}, {}, {},
-            {"n_components": (2), "random_state": (42)})}
-    if display_hover_variables is None:
-        display_hover_variables = []
-    display_hover_variables.insert(0, "Cluster")
-    if data_variables is None:
-        data_variables = []
-    if titles is None:
-        titles = ["all"]
-    elif not ("all" in titles):
-        titles.insert(0, "all")
-    print("Loading Bokeh Plotting Interface")
+        # loads parameters and default values from config file; out of box functions get assigned additionally
+        with open('reduction_functions_config.json', 'r') as json_file:
+            reduction_functions = json.load(json_file)
 
-    httpd_image_server = imageServer.start_server(image_server_port)
+        reduction_functions["UMAP"]["function"] = util.generate_umap
+        reduction_functions["UMAP"]["diagnostic_functions"] = util.generate_umap_diagnostic_plot
 
+        reduction_functions["t-SNE"]["function"] = util.generate_t_sne
+        reduction_functions["t-SNE"]["diagnostic_functions"] = None
+
+        reduction_functions["PHATE"]["function"] = util.generate_phate
+        reduction_functions["PHATE"]["diagnostic_functions"] = None
+    default_parameters_reduction_function = {}
+    default_reduction_function = list(reduction_functions.keys())[0]
+    for parameter in reduction_functions[default_reduction_function]["numerical_parameters"].keys():
+        default_parameters_reduction_function[parameter] = \
+            reduction_functions[default_reduction_function]["numerical_parameters"][parameter]["value"]
+    for parameter in reduction_functions[default_reduction_function]["bool_parameters"].keys():
+        default_parameters_reduction_function[parameter] = \
+            reduction_functions[default_reduction_function]["bool_parameters"][parameter]
+    for parameter in reduction_functions[default_reduction_function]["nominal_parameters"].keys():
+        default_parameters_reduction_function[parameter] = \
+            reduction_functions[default_reduction_function]["nominal_parameters"][parameter]["default_option"]
+    for parameter in reduction_functions[default_reduction_function]["constant_parameters"].keys():
+        default_parameters_reduction_function[parameter] = \
+            reduction_functions[default_reduction_function]["constant_parameters"][
+                parameter]
+
+    datas = {}
+    legend_dfs = {}
+    configs = {}
+    file_folder_paths = {}
     data_frames = {}
-    for title in titles:
 
-        umap_default_parameters = {"n_neighbors": 20, "min_dist": 0.0, "n_components": 2}
-        temp_umap_out = util.get_dimensional_reduction_out("UMAP", datas[title],
-                                                           dump_path=os.path.abspath(dump_files_paths[title]).replace(
-                                                               "\\", '/'),
+    for file in input_file_paths:
+        title = os.path.splitext(os.path.basename(file))[0]
+        file_folder_paths[title] = util.create_file_folder_structure(output_path, title)
+
+        datas[title], legend_dfs[title], configs[title] = util.load_dr_cell_h5(file)
+        # TODO check if its alright for datas to be a df. otherwise convert it here to np array
+        datas[title] = datas[title].to_numpy()
+        if ("data_variables" not in configs[title]) or configs[title]["data_variables"] is None:
+            configs[title]["data_variables"] = []
+        else:
+            configs[title]["data_variables"] = list(configs[title]["data_variables"])
+        if ("display_hover_variables" not in configs[title]) or configs[title][
+            "display_hover_variables"] is None:
+            configs[title]["display_hover_variables"] = []
+        else:
+            configs[title]["display_hover_variables"] = list(configs[title]["display_hover_variables"])
+        configs[title]["display_hover_variables"].insert(0, "Cluster")
+        if ("recording_type" not in configs[title]) or configs[title]["recording_type"] is None:
+            configs[title]["recording_type"] = "None"
+
+        temp_umap_out = util.get_dimensional_reduction_out(default_reduction_function, datas[title],
+                                                           dump_folder_path=file_folder_paths[title],
                                                            reduction_functions=reduction_functions,
-                                                           reduction_params=umap_default_parameters,
+                                                           reduction_params=default_parameters_reduction_function,
                                                            pca_preprocessing=False)
 
         if debug: print('Umap vals: ' + str(temp_umap_out.shape))
@@ -84,8 +114,8 @@ def plot_bokeh(datas, additional_data, dump_files_paths, titles=None, recording_
         data_frames[title] = pd.DataFrame(temp_umap_out, columns=['x', 'y'])
         # creates an index for merging
         data_frames[title].index = range(len(data_frames[title]))
-        additional_data[title].index = range(len(additional_data[title]))
-        data_frames[title] = data_frames[title].merge(additional_data[title], left_index=True, right_index=True)
+        legend_dfs[title].index = range(len(legend_dfs[title]))
+        data_frames[title] = data_frames[title].merge(legend_dfs[title], left_index=True, right_index=True)
         # Add cluster labels to your dataframe
         data_frames[title]['Cluster'] = clusters
 
@@ -95,9 +125,13 @@ def plot_bokeh(datas, additional_data, dump_files_paths, titles=None, recording_
         data_frames[title]['alpha'] = 1.0
         data_frames[title]['ColorMappingCategory'] = 1.0
         data_frames[title]['Cluster'] = -1
-        data_frames[title]['recordingType'] = recording_types[title]
+        data_frames[title]['recordingType'] = configs[title]["recording_type"]
 
-    datasource_df = pd.DataFrame.copy(data_frames[start_dropdown_data_option])
+    print("Loading Bokeh Plotting Interface")
+
+    httpd_image_server = imageServer.start_server(image_server_port)
+
+    datasource_df = pd.DataFrame.copy(data_frames[list(datas.keys())[0]])
     update_cluster_toggle_df = pd.DataFrame.copy(datasource_df)
     # Create a ColumnDataSource
     datasource = ColumnDataSource(datasource_df)
@@ -152,65 +186,12 @@ def plot_bokeh(datas, additional_data, dump_files_paths, titles=None, recording_
     )
 
     # Custom Tools
-
-    hover_variable_string = ""
-    for variable in display_hover_variables:
-        hover_variable_string += f"""<span style='font-size: 8px; color: #224499'>{variable}:</span>\n
-                <span style='font-size: 8px'>@{variable}</span>\n"""
-
-    scatter_plot_hover_tool = HoverTool(tooltips=f"""
-        <div>
-            {hover_variable_string}
-        </div>
-
-        <div>
-            <img
-                src="http://localhost:""" + str(image_server_port) + """/?generate=""" + """@{pdIndex} &recording-type=@{recordingType}" height="100" alt="Image"
-                style="float: left; margin: 0px 15px 15px 0px;"
-                border="1"
-            />
-        </div>
-        
-        
-    """, renderers=[scatter_plot])
-
-    scatter_plot_pca_preprocessing_hover_tool = HoverTool(tooltips=f"""
-        <div>
-            {hover_variable_string}
-        </div>
-
-        <div>
-            <img
-                src="http://localhost:""" + str(image_server_port) + """/?generate=""" + """@{pdIndex}&pca-preprocessing=True" height="100" alt="Image"
-                style="float: left; margin: 0px 15px 15px 0px;"
-                border="1"
-            />
-        </div>
-
-
-    """, renderers=[scatter_plot])
-
-    grid_plot_hover_tool = HoverTool(name="Grid Median Hovertool", tooltips="""
-    <div>
-        <span style='font-size: 8px; color: #224499'>Grid ID:</span>\n
-        <span style='font-size: 8px'>@{gridID}</span>\n """ +
-                                                                            #                                               """
-                                                                            #         <span style='font-size: 8px; color: #224499'>Grid Point Indices:</span>\n
-                                                                            #         <span style='font-size: 8px'>@{pointIndices}</span>\n
-                                                                            #         <span style='font-size: 8px; color: #224499'>Grid Point Neurons:</span>\n
-                                                                            #         <span style='font-size: 8px'>@{pointNeurons}</span>\n
-                                                                            # """
-                                                                            #                                               +
-                                                                            """
-                                  </div>
-                                      <img
-                                          src="http://localhost:""" + str(image_server_port) + """/?generate=""" + """@{pointIndices}&extend-plot=True" height="100" alt="Image"
-            style="float: left; margin: 0px 15px 15px 0px;"
-            border="1"
-        />
-           
-    </div>
-    """, renderers=[grid_plot])
+    scatter_plot_hover_tool = HoverTool(tooltips="""<span style='font-size: 8px'>init</span>\n""",
+                                        renderers=[scatter_plot])
+    scatter_plot_pca_preprocessing_hover_tool = HoverTool(tooltips="""<span style='font-size: 8px'>init</span>\n""",
+                                                          renderers=[scatter_plot])
+    grid_plot_hover_tool = HoverTool(name="Grid Median Hovertool",
+                                     tooltips="""<span style='font-size: 8px'>init</span>\n""", renderers=[grid_plot])
 
     # Add a HoverTool to display the Matplotlib plot when hovering over a data point
     plot_figure.add_tools(scatter_plot_hover_tool)
@@ -224,15 +205,14 @@ def plot_bokeh(datas, additional_data, dump_files_paths, titles=None, recording_
 
     general_title_div = Div(text="<h3>General: </h3>", width=400, height=20)
 
-    options_select_data = titles
-    select_data = Select(title="Data:", value=start_dropdown_data_option, options=options_select_data)
+    select_data = Select(title="Data:", value=list(datas.keys())[0], options=list(datas.keys()))
 
     options_filter_multi_choice_values = {}
     options_select_color = ["all", "Cluster"]
 
-    for option in data_variables:
+    for option in configs[list(datas.keys())[0]]["data_variables"]:
         options_select_color.append(option)
-        for value in np.unique(data_frames[start_dropdown_data_option][option]):
+        for value in np.unique(data_frames[list(datas.keys())[0]][option]):
             options_filter_multi_choice_values[f"{option} == {value}"] = (option, value)
 
     select_color = Select(title="Color:", value=options_select_color[0], options=options_select_color)
@@ -274,8 +254,8 @@ def plot_bokeh(datas, additional_data, dump_files_paths, titles=None, recording_
 
     enable_pca_checkbox = Checkbox(label="Enable PCA Preprocessing", active=False)
     select_pca_dimensions_slider = Slider(title="PCA n_components", start=1,
-                                          end=min(datas[start_dropdown_data_option].shape[0],
-                                                  datas[start_dropdown_data_option].shape[1]), step=1,
+                                          end=min(datas[list(datas.keys())[0]].shape[0],
+                                                  datas[list(datas.keys())[0]].shape[1]), step=1,
                                           value=2,
                                           disabled=True)
     pca_diagnostic_plot_button = Button(label="PCA Diagnostic Plot")
@@ -368,7 +348,7 @@ def plot_bokeh(datas, additional_data, dump_files_paths, titles=None, recording_
     highlight_cluster_checkbox = Checkbox(label="Highlight Cluster", active=False)
     selected_cluster_text_input = TextInput(value="0", title="Cluster:", disabled=True)
     select_cluster_slider = Slider(title="Cluster", start=-1,
-                                   end=len(np.unique(data_frames[start_dropdown_data_option]['Cluster'])), step=1,
+                                   end=len(np.unique(data_frames[list(datas.keys())[0]]['Cluster'])), step=1,
                                    value=0,
                                    disabled=True)
     cluster_selection_layout = column(cluster_selection_title_div, blank_div, highlight_cluster_checkbox,
@@ -413,16 +393,75 @@ def plot_bokeh(datas, additional_data, dump_files_paths, titles=None, recording_
         return out
 
     # Callback function to update graph when sliders change
+    current_select_value = None
+
     def update_graph(attr, old, new):
-        nonlocal datasource_df, update_cluster_toggle_df, current_cluster
+        nonlocal current_select_value, datasource_df, update_cluster_toggle_df, current_cluster, options_select_color, select_color, datasource
         global current_pca_preprocessed_dataset
         # Resets to initial state
         datasource_df = pd.DataFrame.copy(data_frames[select_data.value])
         select_pca_dimensions_slider.end = min(datas[select_data.value].shape[0],
-                                               datas[start_dropdown_data_option].shape[1])
-        # TODO fix Update Cluster
-        # TODO if changing dataset, reset option to activate update cluster checkbox again
+                                               datas[select_data.value].shape[1])
 
+        if not current_select_value == select_data.value:
+            # reset option to activate update cluster checkbox again
+            update_clusters_toggle.active = True
+            # updates the color selection according to the new dataset
+            options_select_color = ["all", "Cluster"]
+            for option in configs[select_data.value]["data_variables"]:
+                options_select_color.append(option)
+                for value in np.unique(data_frames[select_data.value][option]):
+                    options_filter_multi_choice_values[f"{option} == {value}"] = (option, value)
+            select_color.value = options_select_color[0]
+            select_color.options = options_select_color
+
+            hover_variable_string = ""
+            for variable in configs[select_data.value]["display_hover_variables"]:
+                hover_variable_string += f"""<span style='font-size: 8px; color: #224499'>{variable}:</span>\n
+                        <span style='font-size: 8px'>@{variable}</span>\n"""
+
+            scatter_plot_hover_tool.tooltips = f"""
+                <div>
+                    {hover_variable_string}
+                </div>
+                <div>
+                    <img
+                        src="http://localhost:""" + str(image_server_port) + """/?generate=""" + """@{pdIndex} &recording-type=@{recordingType}" height="100" alt="Image"
+                        style="float: left; margin: 0px 15px 15px 0px;"
+                        border="1"
+                    />
+                </div>
+            """
+
+            scatter_plot_pca_preprocessing_hover_tool.tooltips = f"""
+                <div>
+                    {hover_variable_string}
+                </div>
+                <div>
+                    <img
+                        src="http://localhost:""" + str(image_server_port) + """/?generate=""" + """@{pdIndex}&pca-preprocessing=True" height="100" alt="Image"
+                        style="float: left; margin: 0px 15px 15px 0px;"
+                        border="1"
+                    />
+                </div>
+            """
+
+            grid_plot_hover_tool.tooltips = """
+                <div>
+                    <span style='font-size: 8px; color: #224499'>Grid ID:</span>\n
+                    <span style='font-size: 8px'>@{gridID}</span>\n 
+                </div>
+                <img
+                    src="http://localhost:""" + str(image_server_port) + """/?generate=""" + """@{pointIndices}&extend-plot=True" height="100" alt="Image"
+                        style="float: left; margin: 0px 15px 15px 0px;"
+                        border="1"
+                    />
+                </div>
+                """
+
+        current_select_value = select_data.value
+
+        # TODO fix Update Cluster
         if debug: print(datasource_df)
         if debug: print(update_cluster_toggle_df)
         if debug: print(update_cluster_toggle_df[update_cluster_toggle_df["Task"] == "1"])
@@ -457,9 +496,7 @@ def plot_bokeh(datas, additional_data, dump_files_paths, titles=None, recording_
             current_pca_preprocessed_dataset = util.apply_pca_preprocessing(current_data, n_components=int(
                 select_pca_dimensions_slider.value))
             umap_result = util.get_dimensional_reduction_out(select_dimensional_reduction.value, current_data,
-                                                             dump_path=os.path.abspath(
-                                                                 dump_files_paths[select_data.value]).replace("\\",
-                                                                                                              '/'),
+                                                             dump_folder_path=file_folder_paths[select_data.value],
                                                              reduction_functions=reduction_functions,
                                                              reduction_params=get_current_dimension_reduction_parameters(),
                                                              pca_preprocessing=True,
@@ -471,9 +508,8 @@ def plot_bokeh(datas, additional_data, dump_files_paths, titles=None, recording_
                 plot_figure.remove_tools(scatter_plot_pca_preprocessing_hover_tool)
             current_pca_preprocessed_dataset = None
             umap_result = util.get_dimensional_reduction_out(select_dimensional_reduction.value, current_data,
-                                                             dump_path=os.path.abspath(
-                                                                 dump_files_paths[select_data.value]).replace("\\",
-                                                                                                              '/'),
+                                                             dump_folder_path=
+                                                             file_folder_paths[select_data.value],
                                                              reduction_functions=reduction_functions,
                                                              reduction_params=get_current_dimension_reduction_parameters(),
                                                              pca_preprocessing=False)
@@ -703,7 +739,7 @@ def plot_bokeh(datas, additional_data, dump_files_paths, titles=None, recording_
         stats_div.text = f"Data Points: {len(datasource_df)} <br> Dimensions input data: {dimensions_input_data_length} <br> Clusters: {cluster_number} <br> Clustered: {percentage}% <br> Clustered/Unclustered Ratio: {ratio} <br> Clustered: {clustered_count} <br> Unclustered: {unclustered_count} "
 
     def export_data():
-        nonlocal output_file_path
+        file_folder_output_path = os.path.join(file_folder_paths[select_data.value], "output")
         export_df = datasource_df
         if not export_only_selection_toggle.active:
             export_df = pd.DataFrame.copy(data_frames[select_data.value])
@@ -717,8 +753,8 @@ def plot_bokeh(datas, additional_data, dump_files_paths, titles=None, recording_
         filename = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + f"_umap_cluster_output"
 
         # Save the dictionary to a MATLAB .mat file
-        scipy.io.savemat(os.path.join(output_file_path, filename + ".mat"), data_dict)
-        np.save(os.path.join(output_file_path, filename + ".npy"), export_df.to_numpy())
+        scipy.io.savemat(os.path.join(file_folder_output_path, filename + ".mat"), data_dict)
+        np.save(os.path.join(file_folder_output_path, filename + ".npy"), export_df.to_numpy())
         print(f"Data has been saved to {filename}_umap_cluster_output.mat")
         print(f"Data has been saved to {filename}_umap_cluster_output.npy")
 
@@ -763,9 +799,7 @@ def plot_bokeh(datas, additional_data, dump_files_paths, titles=None, recording_
                 # print(current_combination)
                 if enable_pca_checkbox.active:
                     util.get_dimensional_reduction_out(select_dimensional_reduction.value, datas[select_data.value],
-                                                       dump_path=os.path.abspath(
-                                                           dump_files_paths[select_data.value]).replace("\\",
-                                                                                                        '/'),
+                                                       dump_folder_path=file_folder_paths[select_data.value],
                                                        reduction_functions=reduction_functions,
                                                        # adds the variable name back to the current combination and makes a dict to be used in the function as parameters
                                                        reduction_params=dict(zip(variable_names, current_combination)),
@@ -774,9 +808,7 @@ def plot_bokeh(datas, additional_data, dump_files_paths, titles=None, recording_
                                                        )
                 else:
                     util.get_dimensional_reduction_out(select_dimensional_reduction.value, datas[select_data.value],
-                                                       dump_path=os.path.abspath(
-                                                           dump_files_paths[select_data.value]).replace("\\",
-                                                                                                        '/'),
+                                                       dump_folder_path=file_folder_paths[select_data.value],
                                                        reduction_functions=reduction_functions,
                                                        # adds the variable name back to the current combination and makes a dict to be used in the function as parameters
                                                        reduction_params=dict(zip(variable_names, current_combination)),

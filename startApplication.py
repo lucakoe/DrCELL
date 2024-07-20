@@ -1,9 +1,11 @@
 import argparse
 import sys
-from PyQt5.QtCore import QUrl
-from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget
-from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEngineSettings
 from threading import Thread
+
+from PyQt5.QtCore import QUrl
+from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEngineSettings
+from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget
+
 import startBokehServer
 import util
 
@@ -56,6 +58,7 @@ class BokehWindow(QMainWindow):
         self.show()
 
     def closeEvent(self, event):
+        # TODO fix bug where window does not close correctly
         # Stop the Bokeh server thread
         startBokehServer.stop_server()
         self.bokeh_thread.join()  # Wait for the thread to finish
