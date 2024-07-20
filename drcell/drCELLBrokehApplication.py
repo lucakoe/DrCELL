@@ -20,17 +20,18 @@ from matplotlib import pyplot as plt
 import drcell.dimensionalReduction
 import drcell.util
 from drcell.dimensionalReduction.DimensionalReductionObject import return_pca_diagnostic_plot
-from drcell.server import imageServer
-
-# TODO make Application class with those as attributes instead of global variables
-current_dataset = None
-current_pca_preprocessed_dataset = None
+from drcell.server.ImageServer import ImageServer
 
 
 def plot_bokeh(input_file_paths, reduction_functions=None,
                bokeh_show=True, output_path="./data/output/", debug=False, experimental=False,
                hover_image_generation_function=None,
                color_palette=Muted9, image_server_port=8000):
+    # TODO make Application class with those as attributes instead of global variables
+    current_dataset = None
+    current_pca_preprocessed_dataset = None
+    image_server = ImageServer(image_server_port, current_dataset, current_pca_preprocessed_dataset)
+    image_server.start_server()
     print("Starting DrCELL")
     if reduction_functions is None:
         # loads parameters and default values from config file; out of box functions get assigned additionally
@@ -38,7 +39,8 @@ def plot_bokeh(input_file_paths, reduction_functions=None,
             reduction_functions = json.load(json_file)
 
         reduction_functions["UMAP"]["function"] = drcell.dimensionalReduction.umap.generate_umap
-        reduction_functions["UMAP"]["diagnostic_functions"] = drcell.dimensionalReduction.umap.generate_umap_diagnostic_plot
+        reduction_functions["UMAP"][
+            "diagnostic_functions"] = drcell.dimensionalReduction.umap.generate_umap_diagnostic_plot
 
         reduction_functions["t-SNE"]["function"] = drcell.dimensionalReduction.tsne.generate_t_sne
         reduction_functions["t-SNE"]["diagnostic_functions"] = None
@@ -87,11 +89,12 @@ def plot_bokeh(input_file_paths, reduction_functions=None,
         if ("recording_type" not in configs[title]) or configs[title]["recording_type"] is None:
             configs[title]["recording_type"] = "None"
 
-        temp_umap_out = drcell.dimensionalReduction.DimensionalReductionObject.get_dimensional_reduction_out(default_reduction_function, datas[title],
-                                                                                                             dump_folder_path=file_folder_paths[title],
-                                                                                                             reduction_functions=reduction_functions,
-                                                                                                             reduction_params=default_parameters_reduction_function,
-                                                                                                             pca_preprocessing=False)
+        temp_umap_out = drcell.dimensionalReduction.DimensionalReductionObject.get_dimensional_reduction_out(
+            default_reduction_function, datas[title],
+            dump_folder_path=file_folder_paths[title],
+            reduction_functions=reduction_functions,
+            reduction_params=default_parameters_reduction_function,
+            pca_preprocessing=False)
 
         if debug: print('Umap vals: ' + str(temp_umap_out.shape))
 
@@ -117,8 +120,6 @@ def plot_bokeh(input_file_paths, reduction_functions=None,
         data_frames[title]['recordingType'] = configs[title]["recording_type"]
 
     print("Loading Bokeh Plotting Interface")
-
-    httpd_image_server = imageServer.start_server(image_server_port)
 
     datasource_df = pd.DataFrame.copy(data_frames[list(datas.keys())[0]])
     update_cluster_toggle_df = pd.DataFrame.copy(datasource_df)
@@ -482,26 +483,29 @@ def plot_bokeh(input_file_paths, reduction_functions=None,
                 enable_pca_checkbox.disabled = False
                 select_pca_dimensions_slider.disabled = False
             pca_diagnostic_plot_button.disabled = False
-            current_pca_preprocessed_dataset = drcell.dimensionalReduction.DimensionalReductionObject.apply_pca_preprocessing(current_data, n_components=int(
-                select_pca_dimensions_slider.value))
-            umap_result = drcell.dimensionalReduction.DimensionalReductionObject.get_dimensional_reduction_out(select_dimensional_reduction.value, current_data,
-                                                                                                               dump_folder_path=file_folder_paths[select_data.value],
-                                                                                                               reduction_functions=reduction_functions,
-                                                                                                               reduction_params=get_current_dimension_reduction_parameters(),
-                                                                                                               pca_preprocessing=True,
-                                                                                                               pca_n_components=int(select_pca_dimensions_slider.value))
+            current_pca_preprocessed_dataset = drcell.dimensionalReduction.DimensionalReductionObject.apply_pca_preprocessing(
+                current_data, n_components=int(
+                    select_pca_dimensions_slider.value))
+            umap_result = drcell.dimensionalReduction.DimensionalReductionObject.get_dimensional_reduction_out(
+                select_dimensional_reduction.value, current_data,
+                dump_folder_path=file_folder_paths[select_data.value],
+                reduction_functions=reduction_functions,
+                reduction_params=get_current_dimension_reduction_parameters(),
+                pca_preprocessing=True,
+                pca_n_components=int(select_pca_dimensions_slider.value))
         else:
             select_pca_dimensions_slider.disabled = True
             pca_diagnostic_plot_button.disabled = True
             if scatter_plot_pca_preprocessing_hover_tool in plot_figure.tools:
                 plot_figure.remove_tools(scatter_plot_pca_preprocessing_hover_tool)
             current_pca_preprocessed_dataset = None
-            umap_result = drcell.dimensionalReduction.DimensionalReductionObject.get_dimensional_reduction_out(select_dimensional_reduction.value, current_data,
-                                                                                                               dump_folder_path=
-                                                             file_folder_paths[select_data.value],
-                                                                                                               reduction_functions=reduction_functions,
-                                                                                                               reduction_params=get_current_dimension_reduction_parameters(),
-                                                                                                               pca_preprocessing=False)
+            umap_result = drcell.dimensionalReduction.DimensionalReductionObject.get_dimensional_reduction_out(
+                select_dimensional_reduction.value, current_data,
+                dump_folder_path=
+                file_folder_paths[select_data.value],
+                reduction_functions=reduction_functions,
+                reduction_params=get_current_dimension_reduction_parameters(),
+                pca_preprocessing=False)
 
         datasource_df['x'], datasource_df['y'] = umap_result[:, 0], umap_result[:, 1]
         data_frames[select_data.value]['x'], data_frames[select_data.value]['y'] = umap_result[:, 0], umap_result[:, 1]
@@ -565,7 +569,14 @@ def plot_bokeh(input_file_paths, reduction_functions=None,
         update_grid(attr=None, old=None, new=None)
         datasource.data.update(datasource.data)
         update_category(attr=None, old=None, new=None)
-        update_current_dataset(current_data)
+        update_current_dataset(current_data, image_server=image_server)
+
+    def update_current_dataset(dataset, image_server=None):
+        nonlocal current_dataset, current_pca_preprocessed_dataset
+        current_dataset = dataset
+        if not image_server is None:
+            image_server.update_dataset(current_dataset)
+            image_server.update_pca_preprocessed_dataset(current_pca_preprocessed_dataset)
 
     def update_dimensional_reduction(attr, old, new):
         for reduction_functions_layout_name in list(reduction_functions_layouts.keys()):
@@ -687,13 +698,15 @@ def plot_bokeh(input_file_paths, reduction_functions=None,
             max_point = (datasource_df["x"].max(), datasource_df["y"].max())
 
             # Generate data points in the middle of each grid cell
-            grid_datasource_df = drcell.util.generalUtil.generate_grid(min_point, max_point, center_point=grid_start_pos,
+            grid_datasource_df = drcell.util.generalUtil.generate_grid(min_point, max_point,
+                                                                       center_point=grid_start_pos,
                                                                        grid_size_x=grid_size_x, grid_size_y=grid_size_y)
             grid_datasource_df['gridSizeX'] = grid_size_x
             grid_datasource_df['gridSizeY'] = grid_size_y
             grid_datasource_df['alpha'] = 0.1
             grid_datasource_df = drcell.util.generalUtil.assign_points_to_grid(datasource_df, grid_datasource_df,
-                                                                               [('index', 'pointIndices'), ("Neuron", "pointNeurons")])
+                                                                               [('index', 'pointIndices'),
+                                                                                ("Neuron", "pointNeurons")])
 
             grid_datasource.data.update(ColumnDataSource(grid_datasource_df).data)
 
@@ -787,21 +800,23 @@ def plot_bokeh(input_file_paths, reduction_functions=None,
                 # Base case: if no more variables, print the current combination
                 # print(current_combination)
                 if enable_pca_checkbox.active:
-                    drcell.dimensionalReduction.DimensionalReductionObject.get_dimensional_reduction_out(select_dimensional_reduction.value, datas[select_data.value],
-                                                                                                         dump_folder_path=file_folder_paths[select_data.value],
-                                                                                                         reduction_functions=reduction_functions,
-                                                                                                         # adds the variable name back to the current combination and makes a dict to be used in the function as parameters
-                                                                                                         reduction_params=dict(zip(variable_names, current_combination)),
-                                                                                                         pca_preprocessing=True,
-                                                                                                         pca_n_components=select_pca_dimensions_slider.value
-                                                                                                         )
+                    drcell.dimensionalReduction.DimensionalReductionObject.get_dimensional_reduction_out(
+                        select_dimensional_reduction.value, datas[select_data.value],
+                        dump_folder_path=file_folder_paths[select_data.value],
+                        reduction_functions=reduction_functions,
+                        # adds the variable name back to the current combination and makes a dict to be used in the function as parameters
+                        reduction_params=dict(zip(variable_names, current_combination)),
+                        pca_preprocessing=True,
+                        pca_n_components=select_pca_dimensions_slider.value
+                    )
                 else:
-                    drcell.dimensionalReduction.DimensionalReductionObject.get_dimensional_reduction_out(select_dimensional_reduction.value, datas[select_data.value],
-                                                                                                         dump_folder_path=file_folder_paths[select_data.value],
-                                                                                                         reduction_functions=reduction_functions,
-                                                                                                         # adds the variable name back to the current combination and makes a dict to be used in the function as parameters
-                                                                                                         reduction_params=dict(zip(variable_names, current_combination)),
-                                                                                                         pca_preprocessing=False)
+                    drcell.dimensionalReduction.DimensionalReductionObject.get_dimensional_reduction_out(
+                        select_dimensional_reduction.value, datas[select_data.value],
+                        dump_folder_path=file_folder_paths[select_data.value],
+                        reduction_functions=reduction_functions,
+                        # adds the variable name back to the current combination and makes a dict to be used in the function as parameters
+                        reduction_params=dict(zip(variable_names, current_combination)),
+                        pca_preprocessing=False)
                 # TODO add buffering for PCA preprocessing
 
             else:
@@ -834,7 +849,8 @@ def plot_bokeh(input_file_paths, reduction_functions=None,
                         values = np.arange(**parameter_range).tolist()
                         if type(parameter_range["step"]) is float:
                             # rounds values to decimal place of corresponding step variable, to avoid weird float behaviour
-                            values = [round(x, drcell.util.generalUtil.get_decimal_places(parameter_range["step"])) for x in values]
+                            values = [round(x, drcell.util.generalUtil.get_decimal_places(parameter_range["step"])) for
+                                      x in values]
                         variable_values.append(values)
                         variable_names.append(variable_name)
                 elif parameter_type == "bool_parameters":
@@ -928,10 +944,3 @@ def plot_bokeh(input_file_paths, reduction_functions=None,
     update_stats()
     update_graph(attr=None, old=None, new=None)
     print("Finished loading Bokeh Plotting Interface")
-
-
-def update_current_dataset(dataset):
-    global current_dataset, current_pca_preprocessed_dataset
-    current_dataset = dataset
-    imageServer.update_server_dataset(current_dataset)
-    imageServer.update_server_pca_preprocessed_dataset(current_pca_preprocessed_dataset)

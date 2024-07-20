@@ -1,5 +1,4 @@
 import argparse
-import importlib
 import sys
 from threading import Thread
 
@@ -7,43 +6,25 @@ from PyQt5.QtCore import QUrl
 from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEngineSettings
 from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget
 
-import drcell.util.generalUtil
 import startBokehServer
 
 
 # PyQt window class
-class BokehWindow(QMainWindow):
+class DrCELLWindow(QMainWindow):
 
     def __init__(self, port=5000, port_image=8000, app_path=None):
-        if app_path is None:
-            # Load the script from the specified package and module
-            package_name = "drcell"
-            module_name = "main"
-
-            spec = importlib.util.find_spec(f"{package_name}.{module_name}")
-            if spec is None:
-                raise ImportError(f"Module {package_name}.{module_name} not found")
-            app_path = spec.origin
         super().__init__()
         self.port = port
         self.port_image = port_image
         self.app_path = app_path
-        while not drcell.util.generalUtil.is_port_available(self.port):
-            print(f"Server port {self.port} is not available")
-            self.port += 1
-        while not drcell.util.generalUtil.is_port_available(self.port_image):
-            print(f"Image server port {self.port_image} is not available")
-            self.port_image += 1
-
-        print(f"Server port: {port}")
-        print(f"Image server port: {port_image}")
+        self.dr_cell_server = startBokehServer.DrCELLBokehServer(port=self.port, port_image=self.port_image,
+                                                                 app_path=self.app_path)
         self.init_ui()
 
     def init_ui(self):
         self.setWindowTitle('Dimensional reduction Cluster Exploration and Labeling Library')
-        kwargs = {'port': self.port, 'port_image': self.port_image, 'app_path': self.app_path, "skip_port_check": True}
         # Start Bokeh server in a separate thread
-        self.bokeh_thread = Thread(target=startBokehServer.run_server, kwargs=kwargs)
+        self.bokeh_thread = Thread(target=self.dr_cell_server.start_server)
         self.bokeh_thread.start()
 
         # Create a web view widget
@@ -90,6 +71,6 @@ if __name__ == '__main__':
     QWebEngineSettings.globalSettings().setAttribute(QWebEngineSettings.PluginsEnabled, True)
     QWebEngineSettings.globalSettings().setAttribute(QWebEngineSettings.JavascriptEnabled, True)
 
-    main_window = BokehWindow(port=args.port, port_image=args.port_image, app_path=args.app_path)
+    main_window = DrCELLWindow(port=args.port, port_image=args.port_image, app_path=args.app_path)
 
     sys.exit(app.exec_())
