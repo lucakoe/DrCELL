@@ -1,41 +1,29 @@
 import datetime
-import io
 import json
 import os
 import random
 
 import hdbscan
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import scipy
-import sklearn.decomposition  # PCA
-import umap.plot
+import sklearn.decomposition
 from bokeh.events import Tap
-from bokeh.io import curdoc
+from bokeh.io import show, curdoc
 from bokeh.layouts import column, row
-from bokeh.models import HoverTool, ColumnDataSource, CategoricalColorMapper, Slider, Select, Checkbox, \
-    MultiChoice, ColorBar, TextInput, RadioGroup, Div, Button
+from bokeh.models import ColumnDataSource, HoverTool, Div, Select, Button, MultiChoice, Checkbox, TextInput, Slider, \
+    RadioGroup, ColorBar, CategoricalColorMapper
 from bokeh.palettes import Muted9
-from bokeh.plotting import figure, show
+from bokeh.plotting import figure
+from matplotlib import pyplot as plt
 
-import imageServer
-import util
+import drcell.dimensionalReduction
+import drcell.util
+from drcell.dimensionalReduction.DimensionalReductionObject import return_pca_diagnostic_plot
+from drcell.server import imageServer
 
 current_dataset = None
 current_pca_preprocessed_dataset = None
-
-
-def generate_diagnostic_plots(umap_object, data):
-    mapper = umap_object.fit(data)
-    umap.plot.diagnostic(mapper, diagnostic_type='pca')
-    plt.show()
-    umap.plot.diagnostic(mapper, diagnostic_type='vq')
-    plt.show()
-    umap.plot.diagnostic(mapper, diagnostic_type='local_dim')
-    plt.show()
-    umap.plot.diagnostic(mapper, diagnostic_type='neighborhood')
-    plt.show()
 
 
 def plot_bokeh(input_file_paths, reduction_functions=None,
@@ -48,13 +36,13 @@ def plot_bokeh(input_file_paths, reduction_functions=None,
         with open('reduction_functions_config.json', 'r') as json_file:
             reduction_functions = json.load(json_file)
 
-        reduction_functions["UMAP"]["function"] = util.generate_umap
-        reduction_functions["UMAP"]["diagnostic_functions"] = util.generate_umap_diagnostic_plot
+        reduction_functions["UMAP"]["function"] = drcell.dimensionalReduction.umap.generate_umap
+        reduction_functions["UMAP"]["diagnostic_functions"] = drcell.dimensionalReduction.umap.generate_umap_diagnostic_plot
 
-        reduction_functions["t-SNE"]["function"] = util.generate_t_sne
+        reduction_functions["t-SNE"]["function"] = drcell.dimensionalReduction.tsne.generate_t_sne
         reduction_functions["t-SNE"]["diagnostic_functions"] = None
 
-        reduction_functions["PHATE"]["function"] = util.generate_phate
+        reduction_functions["PHATE"]["function"] = drcell.dimensionalReduction.phate.generate_phate
         reduction_functions["PHATE"]["diagnostic_functions"] = None
     default_parameters_reduction_function = {}
     default_reduction_function = list(reduction_functions.keys())[0]
@@ -80,9 +68,9 @@ def plot_bokeh(input_file_paths, reduction_functions=None,
 
     for file in input_file_paths:
         title = os.path.splitext(os.path.basename(file))[0]
-        file_folder_paths[title] = util.create_file_folder_structure(output_path, title)
+        file_folder_paths[title] = drcell.util.generalUtil.create_file_folder_structure(output_path, title)
 
-        datas[title], legend_dfs[title], configs[title] = util.load_dr_cell_h5(file)
+        datas[title], legend_dfs[title], configs[title] = drcell.util.drCELLFileUtil.load_dr_cell_h5(file)
         # TODO check if its alright for datas to be a df. otherwise convert it here to np array
         datas[title] = datas[title].to_numpy()
         if ("data_variables" not in configs[title]) or configs[title]["data_variables"] is None:
@@ -98,11 +86,11 @@ def plot_bokeh(input_file_paths, reduction_functions=None,
         if ("recording_type" not in configs[title]) or configs[title]["recording_type"] is None:
             configs[title]["recording_type"] = "None"
 
-        temp_umap_out = util.get_dimensional_reduction_out(default_reduction_function, datas[title],
-                                                           dump_folder_path=file_folder_paths[title],
-                                                           reduction_functions=reduction_functions,
-                                                           reduction_params=default_parameters_reduction_function,
-                                                           pca_preprocessing=False)
+        temp_umap_out = drcell.dimensionalReduction.DimensionalReductionObject.get_dimensional_reduction_out(default_reduction_function, datas[title],
+                                                                                                             dump_folder_path=file_folder_paths[title],
+                                                                                                             reduction_functions=reduction_functions,
+                                                                                                             reduction_params=default_parameters_reduction_function,
+                                                                                                             pca_preprocessing=False)
 
         if debug: print('Umap vals: ' + str(temp_umap_out.shape))
 
@@ -155,8 +143,8 @@ def plot_bokeh(input_file_paths, reduction_functions=None,
     max_point = (datasource_df["x"].max(), datasource_df["y"].max())
 
     # Generate data points in the middle of each grid cell
-    grid_datasource_df = util.generate_grid(min_point, max_point, center_point=grid_start_pos,
-                                            grid_size_x=gridSizeX, grid_size_y=gridSizeY)
+    grid_datasource_df = drcell.util.generalUtil.generate_grid(min_point, max_point, center_point=grid_start_pos,
+                                                               grid_size_x=gridSizeX, grid_size_y=gridSizeY)
 
     grid_datasource_df['alpha'] = 0.1
     grid_datasource_df['gridSizeX'] = gridSizeX
@@ -376,7 +364,7 @@ def plot_bokeh(input_file_paths, reduction_functions=None,
                 if type(value) == float:
                     # rounds the value to the same amount of numbers behind the decimal point as the step of the slider.
                     # this is to prevent weird behavior with floats when buffering values
-                    round(value, util.get_decimal_places(
+                    round(value, drcell.util.generalUtil.get_decimal_places(
                         reduction_functions_widgets[reduction_function][numeric_parameter].step))
                 out[numeric_parameter] = value
 
@@ -493,26 +481,26 @@ def plot_bokeh(input_file_paths, reduction_functions=None,
                 enable_pca_checkbox.disabled = False
                 select_pca_dimensions_slider.disabled = False
             pca_diagnostic_plot_button.disabled = False
-            current_pca_preprocessed_dataset = util.apply_pca_preprocessing(current_data, n_components=int(
+            current_pca_preprocessed_dataset = drcell.dimensionalReduction.DimensionalReductionObject.apply_pca_preprocessing(current_data, n_components=int(
                 select_pca_dimensions_slider.value))
-            umap_result = util.get_dimensional_reduction_out(select_dimensional_reduction.value, current_data,
-                                                             dump_folder_path=file_folder_paths[select_data.value],
-                                                             reduction_functions=reduction_functions,
-                                                             reduction_params=get_current_dimension_reduction_parameters(),
-                                                             pca_preprocessing=True,
-                                                             pca_n_components=int(select_pca_dimensions_slider.value))
+            umap_result = drcell.dimensionalReduction.DimensionalReductionObject.get_dimensional_reduction_out(select_dimensional_reduction.value, current_data,
+                                                                                                               dump_folder_path=file_folder_paths[select_data.value],
+                                                                                                               reduction_functions=reduction_functions,
+                                                                                                               reduction_params=get_current_dimension_reduction_parameters(),
+                                                                                                               pca_preprocessing=True,
+                                                                                                               pca_n_components=int(select_pca_dimensions_slider.value))
         else:
             select_pca_dimensions_slider.disabled = True
             pca_diagnostic_plot_button.disabled = True
             if scatter_plot_pca_preprocessing_hover_tool in plot_figure.tools:
                 plot_figure.remove_tools(scatter_plot_pca_preprocessing_hover_tool)
             current_pca_preprocessed_dataset = None
-            umap_result = util.get_dimensional_reduction_out(select_dimensional_reduction.value, current_data,
-                                                             dump_folder_path=
+            umap_result = drcell.dimensionalReduction.DimensionalReductionObject.get_dimensional_reduction_out(select_dimensional_reduction.value, current_data,
+                                                                                                               dump_folder_path=
                                                              file_folder_paths[select_data.value],
-                                                             reduction_functions=reduction_functions,
-                                                             reduction_params=get_current_dimension_reduction_parameters(),
-                                                             pca_preprocessing=False)
+                                                                                                               reduction_functions=reduction_functions,
+                                                                                                               reduction_params=get_current_dimension_reduction_parameters(),
+                                                                                                               pca_preprocessing=False)
 
         datasource_df['x'], datasource_df['y'] = umap_result[:, 0], umap_result[:, 1]
         data_frames[select_data.value]['x'], data_frames[select_data.value]['y'] = umap_result[:, 0], umap_result[:, 1]
@@ -698,13 +686,13 @@ def plot_bokeh(input_file_paths, reduction_functions=None,
             max_point = (datasource_df["x"].max(), datasource_df["y"].max())
 
             # Generate data points in the middle of each grid cell
-            grid_datasource_df = util.generate_grid(min_point, max_point, center_point=grid_start_pos,
-                                                    grid_size_x=grid_size_x, grid_size_y=grid_size_y)
+            grid_datasource_df = drcell.util.generalUtil.generate_grid(min_point, max_point, center_point=grid_start_pos,
+                                                                       grid_size_x=grid_size_x, grid_size_y=grid_size_y)
             grid_datasource_df['gridSizeX'] = grid_size_x
             grid_datasource_df['gridSizeY'] = grid_size_y
             grid_datasource_df['alpha'] = 0.1
-            grid_datasource_df = util.assign_points_to_grid(datasource_df, grid_datasource_df,
-                                                            [('index', 'pointIndices'), ("Neuron", "pointNeurons")])
+            grid_datasource_df = drcell.util.generalUtil.assign_points_to_grid(datasource_df, grid_datasource_df,
+                                                                               [('index', 'pointIndices'), ("Neuron", "pointNeurons")])
 
             grid_datasource.data.update(ColumnDataSource(grid_datasource_df).data)
 
@@ -789,7 +777,7 @@ def plot_bokeh(input_file_paths, reduction_functions=None,
         global current_dataset
         parm = get_current_dimension_reduction_parameters()
         parm["data"] = current_dataset
-        util.generate_umap_diagnostic_plot(**parm)
+        drcell.dimensionalReduction.umap.generate_umap_diagnostic_plot(**parm)
 
     def buffer_parameters():
 
@@ -798,21 +786,21 @@ def plot_bokeh(input_file_paths, reduction_functions=None,
                 # Base case: if no more variables, print the current combination
                 # print(current_combination)
                 if enable_pca_checkbox.active:
-                    util.get_dimensional_reduction_out(select_dimensional_reduction.value, datas[select_data.value],
-                                                       dump_folder_path=file_folder_paths[select_data.value],
-                                                       reduction_functions=reduction_functions,
-                                                       # adds the variable name back to the current combination and makes a dict to be used in the function as parameters
-                                                       reduction_params=dict(zip(variable_names, current_combination)),
-                                                       pca_preprocessing=True,
-                                                       pca_n_components=select_pca_dimensions_slider.value
-                                                       )
+                    drcell.dimensionalReduction.DimensionalReductionObject.get_dimensional_reduction_out(select_dimensional_reduction.value, datas[select_data.value],
+                                                                                                         dump_folder_path=file_folder_paths[select_data.value],
+                                                                                                         reduction_functions=reduction_functions,
+                                                                                                         # adds the variable name back to the current combination and makes a dict to be used in the function as parameters
+                                                                                                         reduction_params=dict(zip(variable_names, current_combination)),
+                                                                                                         pca_preprocessing=True,
+                                                                                                         pca_n_components=select_pca_dimensions_slider.value
+                                                                                                         )
                 else:
-                    util.get_dimensional_reduction_out(select_dimensional_reduction.value, datas[select_data.value],
-                                                       dump_folder_path=file_folder_paths[select_data.value],
-                                                       reduction_functions=reduction_functions,
-                                                       # adds the variable name back to the current combination and makes a dict to be used in the function as parameters
-                                                       reduction_params=dict(zip(variable_names, current_combination)),
-                                                       pca_preprocessing=False)
+                    drcell.dimensionalReduction.DimensionalReductionObject.get_dimensional_reduction_out(select_dimensional_reduction.value, datas[select_data.value],
+                                                                                                         dump_folder_path=file_folder_paths[select_data.value],
+                                                                                                         reduction_functions=reduction_functions,
+                                                                                                         # adds the variable name back to the current combination and makes a dict to be used in the function as parameters
+                                                                                                         reduction_params=dict(zip(variable_names, current_combination)),
+                                                                                                         pca_preprocessing=False)
                 # TODO add buffering for PCA preprocessing
 
             else:
@@ -845,7 +833,7 @@ def plot_bokeh(input_file_paths, reduction_functions=None,
                         values = np.arange(**parameter_range).tolist()
                         if type(parameter_range["step"]) is float:
                             # rounds values to decimal place of corresponding step variable, to avoid weird float behaviour
-                            values = [round(x, util.get_decimal_places(parameter_range["step"])) for x in values]
+                            values = [round(x, drcell.util.generalUtil.get_decimal_places(parameter_range["step"])) for x in values]
                         variable_values.append(values)
                         variable_names.append(variable_name)
                 elif parameter_type == "bool_parameters":
@@ -940,219 +928,6 @@ def plot_bokeh(input_file_paths, reduction_functions=None,
     print("Finished loading Bokeh Plotting Interface")
 
 
-def plot_and_return_spikes(trace_data_arrays, indices, fps=30, number_consecutive_recordings=1,
-                           background_traces=False, recording_type=None):
-    """Plot spike times: if one array in fluorescence_arrays, then raw data is plotted if multiple arrays in fluorescence_arrays, then median gets plotted.
-
-    Parameters
-    ----------
-    trace_data_arrays : np.ndarray
-        2-dimensional array with trace data
-    indices : list
-        list of indices of traces to be plotted from the fluorescence_arrays
-    fps : int
-        frames per second of recording (to calculate the time values of the samples)
-    number_consecutive_recordings : int
-        number of recordings that are stitched together (relevant for dividing lines in plot)
-    background_traces : boolean
-        if True plots the raw traces of the selected indices gray in the background (applies only with multiple traces)
-
-    Returns
-    -------
-    matplotlib.pyplot
-        plot of spike trace
-
-
-    """
-
-    # Calculate time values based on the frame rate per second
-    n = trace_data_arrays.shape[1]
-    time_values = np.arange(n) / fps
-
-    # Plot intensity against time
-    plt.figure(figsize=(10, 4))  # Adjust the figure size as needed
-
-    # takes just the arrays with corresponding indices
-    selected_arrays = trace_data_arrays[indices]
-    # makes median over all
-    median_selected_arrays = np.median(selected_arrays, axis=0)
-
-    plt.xlabel('Time (s)')
-
-    if recording_type == "Ephys":
-        plt.ylabel('Firing rate (spikes/s)')
-        plt.title('Firing rate vs. Time')
-        if background_traces:
-            for selected_fluorescence_array in selected_arrays:
-                plt.plot(time_values, selected_fluorescence_array, linestyle='-', color='gray', alpha=0.3)
-
-        plt.plot(time_values, median_selected_arrays, linestyle='-')
-    elif recording_type == "2P":
-        plt.ylabel('Fluorescence Intensity')
-        plt.title('Fluorescence Intensity vs. Time')
-        if background_traces:
-            for selected_fluorescence_array in selected_arrays:
-                plt.plot(time_values, selected_fluorescence_array, linestyle='-', color='gray', alpha=0.3)
-
-        plt.plot(time_values, median_selected_arrays, linestyle='-')
-    else:
-        plt.ylabel('Dimension y-Axis')
-        plt.title('Original data')
-        if background_traces:
-            for selected_fluorescence_array in selected_arrays:
-                plt.plot(range(n), selected_fluorescence_array, linestyle='-', color='gray', alpha=0.3)
-
-        plt.plot(range(n), median_selected_arrays, linestyle='-')
-    plt.grid(True)
-
-    # Add vertical lines at specific x-coordinates (assuming they have the same recording length)
-    for i in range(1, number_consecutive_recordings):
-        plt.axvline(x=((trace_data_arrays.shape[1] / fps) / number_consecutive_recordings) * i, color='black',
-                    linestyle='--')
-
-    # Show the plot
-    # plt.show()
-
-    return plt
-
-
-def plot_and_return_pca_plot(data_arrays, indices, background_traces=False):
-    """Plot spike times: if one array in fluorescence_arrays, then raw data is plotted if multiple arrays in fluorescence_arrays, then median gets plotted.
-
-    Parameters
-    ----------
-    data_arrays : np.ndarray
-        2-dimensional array with trace data
-    indices : list
-        list of indices of traces to be plotted from the pca preprocessed fluorescence_arrays
-    background_traces : boolean
-        if True plots the raw traces of the selected indices gray in the background (applies only with multiple traces)
-
-    Returns
-    -------
-    matplotlib.pyplot
-        plot of pca plot
-
-
-    """
-
-    # Calculate time values based on the frame rate per second
-    n = data_arrays.shape[1]
-    pca_components = np.arange(n)
-
-    # Plot intensity against time
-    plt.figure(figsize=(10, 4))  # Adjust the figure size as needed
-
-    # takes just the arrays with corresponding indices
-    selected_arrays = data_arrays[indices]
-    # makes median over all
-
-    median_selected_arrays = np.median(selected_arrays, axis=0)
-
-    if background_traces:
-        for selected_fluorescence_array in selected_arrays:
-            plt.plot(pca_components, selected_fluorescence_array, linestyle='-', color='gray', alpha=0.3)
-
-    plt.plot(pca_components, median_selected_arrays, linestyle='-', color='red')
-    plt.xlabel('PCA Component')
-    plt.ylabel('Value')
-    plt.title('Plot of Values of PCA Components')
-    plt.grid(True)
-
-    # Show the plot
-    # plt.show()
-
-    return plt
-
-
-def get_plot_for_indices(trace_arrays, indices, fps=30, number_consecutive_recordings=1, extend_plot=False,
-                         recording_type=None):
-    if trace_arrays is None or indices is None:
-        print("No image to plot")
-        # Create a figure with a black background
-        fig = plt.figure(facecolor='black')
-        ax = fig.add_subplot(111, facecolor='black')
-
-        # Hide axis and grid lines
-        ax.axis('off')
-        return plt
-    else:
-        return plot_and_return_spikes(trace_arrays, indices, fps=fps,
-                                      number_consecutive_recordings=number_consecutive_recordings,
-                                      background_traces=extend_plot, recording_type=recording_type)
-
-
-def get_pca_plot_for_indices(trace_arrays, indices, extend_plot=False):
-    if trace_arrays is None or indices is None:
-        print("No image to plot")
-        # Create a figure with a black background
-        fig = plt.figure(facecolor='black')
-        ax = fig.add_subplot(111, facecolor='black')
-
-        # Hide axis and grid lines
-        ax.axis('off')
-        return plt
-    else:
-        return plot_and_return_pca_plot(trace_arrays, indices, background_traces=extend_plot)
-
-
-def get_plot_for_indices_of_current_dataset(indices, fps=30, number_consecutive_recordings=1, extend_plot=False,
-                                            pca_preprocessing=False, recording_type=None):
-    global current_dataset, current_pca_preprocessed_dataset
-    dataset = current_dataset
-    if pca_preprocessing:
-        dataset = current_pca_preprocessed_dataset
-        return get_pca_plot_for_indices(dataset, indices,
-                                        extend_plot=extend_plot)
-
-        # TODO adjust pca plotting accordingly with correct axis etc.
-    return get_plot_for_indices(dataset, indices, fps=fps,
-                                number_consecutive_recordings=number_consecutive_recordings, extend_plot=extend_plot,
-                                recording_type=recording_type)
-
-
 def update_current_dataset(dataset):
     global current_dataset
     current_dataset = dataset
-
-
-def plot_and_save_spikes(neuron_number, dataframe, output_folder, fps=30, number_consecutive_recordings=6):
-    # takes selected row (fluorescence data of one cell), makes it to an array and plots it
-    plt = plot_and_return_spikes(dataframe.values, neuron_number, fps=fps,
-                                 number_consecutive_recordings=number_consecutive_recordings)
-    buf = io.BytesIO()
-    plt.savefig(buf, format='png', dpi=80)
-    buf.seek(0)
-    # Ensure the output directory exists; create it if it doesn't
-    os.makedirs(output_folder, exist_ok=True)
-
-    # Save each image as a separate PNG file
-    file_path = os.path.join(output_folder, f"image_{neuron_number}.png")
-    with open(file_path, "wb") as file:
-        file.write(buf.read())
-
-    print(f"Saved image {neuron_number} to {file_path}")
-    plt.close()
-
-
-def return_pca_diagnostic_plot(diagnostic_data):
-    # Create a figure and axis
-    fig, ax = plt.subplots()
-
-    # Plot the bar graph
-    ax.bar(np.arange(len(diagnostic_data)), diagnostic_data, label='Individual Values', color='blue',
-           alpha=0.7)
-
-    # Plot the cumulative line
-    cumulative_values = np.cumsum(diagnostic_data)
-    ax.plot(np.arange(len(diagnostic_data)), cumulative_values, label='Cumulative Values', color='red',
-            linestyle='--',
-            marker='o')
-
-    # Add labels and title
-    ax.set_xlabel('Components')
-    ax.set_ylabel('Explained Variance')
-    ax.set_title('PCA Diagnostic Plot')
-    ax.legend()
-
-    return plt

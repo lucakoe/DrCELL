@@ -4,14 +4,23 @@ import sys
 
 from bokeh.palettes import Paired12
 
-import util
+project_path = r"C:\path\to\DrCELL"
+# change working directory, because Bokeh Server doesn't recognize it otherwise
+os.chdir(os.path.join(project_path))
+# add to project Path so Bokeh Server can import other python files correctly
+sys.path.append(project_path)
+
+import drcell.dimensionalReduction.phate
+import drcell.dimensionalReduction.tsne
+import drcell.dimensionalReduction.umap
+import drcell.drCELLBrokehApplication
+import drcell.util.drCELLFileUtil
 
 debug = False
 experimental = True
 bokeh_show = False
 color_palette = Paired12
 
-project_path = r"C:\path\to\DrCELL"
 data_path = os.path.join(project_path, "data")
 output_path = data_path
 # it's important to use different names for different datasets!
@@ -39,25 +48,25 @@ for matlab_dataset in included_legacy_matlab_datasets:
     recording_type = matlab_dataset[1]
 
     print(f"Converting {input_matlab_file_path} to DrCELL .h5 files")
-    converted_input_file_paths = util.convert_data_AD_IL(input_matlab_file_path,
-                                                         os.path.dirname(input_matlab_file_path),
-                                                         recording_type=recording_type)
+    converted_input_file_paths = drcell.util.drCELLFileUtil.convert_data_AD_IL(input_matlab_file_path,
+                                                                               os.path.dirname(input_matlab_file_path),
+                                                                               recording_type=recording_type)
     input_file_paths.extend(converted_input_file_paths)
 
 # checks if there is a image server port given in the arguments; if not defaults to 8000
 image_server_port = int(sys.argv[1]) if len(sys.argv) > 1 else '8000'
 
 # loads parameters and default values from config file; out of box functions get assigned additionally
-with open('reduction_functions_config.json', 'r') as json_file:
+with open('config/reduction_functions_config.json', 'r') as json_file:
     reduction_functions = json.load(json_file)
 
-reduction_functions["UMAP"]["function"] = util.generate_umap
-reduction_functions["UMAP"]["diagnostic_functions"] = util.generate_umap_diagnostic_plot
+reduction_functions["UMAP"]["function"] = drcell.dimensionalReduction.umap.generate_umap
+reduction_functions["UMAP"]["diagnostic_functions"] = drcell.dimensionalReduction.umap.generate_umap_diagnostic_plot
 
-reduction_functions["t-SNE"]["function"] = util.generate_t_sne
+reduction_functions["t-SNE"]["function"] = drcell.dimensionalReduction.tsne.generate_t_sne
 reduction_functions["t-SNE"]["diagnostic_functions"] = None
 
-reduction_functions["PHATE"]["function"] = util.generate_phate
+reduction_functions["PHATE"]["function"] = drcell.dimensionalReduction.phate.generate_phate
 reduction_functions["PHATE"]["diagnostic_functions"] = None
 # Example custom function
 # # n_components has to be 2 in custom functions; first parameter has to be data!!!
@@ -85,17 +94,11 @@ reduction_functions["PHATE"]["diagnostic_functions"] = None
 #                                                                           "constant_parameter_n": (True)}}
 
 
-# change working directory, because Bokeh Server doesn't recognize it otherwise
-os.chdir(os.path.join(project_path))
-# add to project Path so Bokeh Server can import other python files correctly
-sys.path.append(project_path)
-
-import plotting
-
 if __name__ == '__main__':
     bokeh_show = True
 
 # loads bokeh interface
-plotting.plot_bokeh(input_file_paths, reduction_functions=reduction_functions,
-                    bokeh_show=bokeh_show, color_palette=color_palette, debug=debug,
-                    experimental=experimental, output_path=output_path, image_server_port=image_server_port)
+drcell.drCELLBrokehApplication.plot_bokeh(input_file_paths, reduction_functions=reduction_functions,
+                                          bokeh_show=bokeh_show, color_palette=color_palette, debug=debug,
+                                          experimental=experimental, output_path=output_path,
+                                          image_server_port=image_server_port)

@@ -6,8 +6,8 @@ from PyQt5.QtCore import QUrl
 from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEngineSettings
 from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget
 
+import drcell.util.generalUtil
 import startBokehServer
-import util
 
 
 # PyQt window class
@@ -18,10 +18,10 @@ class BokehWindow(QMainWindow):
         self.port = port
         self.port_image = port_image
         self.app_path = app_path
-        while not util.is_port_available(self.port):
+        while not drcell.util.generalUtil.is_port_available(self.port):
             print(f"Server port {self.port} is not available")
             self.port += 1
-        while not util.is_port_available(self.port_image):
+        while not drcell.util.generalUtil.is_port_available(self.port_image):
             print(f"Image server port {self.port_image} is not available")
             self.port_image += 1
 

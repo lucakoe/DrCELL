@@ -3,7 +3,8 @@ from bokeh.application import Application
 from bokeh.application.handlers.script import ScriptHandler
 from tornado.ioloop import IOLoop
 import argparse
-import util
+
+import drcell.util.generalUtil
 
 # Global variable to hold the server instance
 server_instance = None
@@ -12,10 +13,10 @@ server_instance = None
 def run_server(port=5000, port_image=8000, app_path='main.py', skip_port_check=False):
     global server_instance
     if not skip_port_check:
-        while not util.is_port_available(port):
+        while not drcell.util.generalUtil.is_port_available(port):
             print(f"Server port {port} is not available")
             port += 1
-        while not util.is_port_available(port_image):
+        while not drcell.util.generalUtil.is_port_available(port_image):
             print(f"Image server port {port_image} is not available")
             port_image += 1
 

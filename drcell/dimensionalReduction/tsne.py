@@ -1,9 +1,11 @@
+import sklearn.manifold
+
 from drcell.dimensionalReduction.DimensionalReductionObject import DimensionalReductionObject
 
 
 class TSNEDRObject(DimensionalReductionObject):
     def __init__(self):
-        reduction_functions = {"function": util.generate_t_sne,
+        reduction_functions = {"function": generate_t_sne,
                                         "diagnostic_functions": {},
                                         "numeric_parameters": {
                                             "perplexity": {"start": 5, "end": 50, "step": 1, "value": 30},
@@ -20,5 +22,9 @@ class TSNEDRObject(DimensionalReductionObject):
                                         "constant_parameters": {"n_components": (2)}}
 
 
-
-
+def generate_t_sne(data, perplexity=30, learning_rate=200, n_iter=1000, early_exaggeration=12, angle=0.5,
+                   metric="euclidean", n_components=2):
+    tsne_operator = sklearn.manifold.TSNE(perplexity=perplexity, learning_rate=learning_rate, n_iter=n_iter,
+                                          early_exaggeration=early_exaggeration, angle=angle,
+                                          metric=metric, n_components=n_components)
+    return tsne_operator.fit_transform(data)

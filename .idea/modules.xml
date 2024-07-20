@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/Cluster_Exploration_and_Labeling_Library.iml" filepath="$PROJECT_DIR$/.idea/Cluster_Exploration_and_Labeling_Library.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/Dimensionality_reduction_Cluster_Exploration_and_Labeling_Library.iml" filepath="$PROJECT_DIR$/.idea/Dimensionality_reduction_Cluster_Exploration_and_Labeling_Library.iml" />
     </modules>
   </component>
 </project>

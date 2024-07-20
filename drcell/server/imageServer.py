@@ -5,7 +5,7 @@ from PIL import Image, ImageDraw
 import io
 import threading
 
-import plotting
+import drcell.util.plottingUtil
 
 
 class RequestHandler(BaseHTTPRequestHandler):
@@ -78,34 +78,16 @@ class RequestHandler(BaseHTTPRequestHandler):
     def generate_image(self, parameter, extend_plot, pca_preprocessing=False, recording_type=None):
         # Split the parameter string into integers
         parameter = [int(x.strip()) for x in parameter.split(',')]
-        # # Example: Generate a simple image with bars based on the parameter
-        # width, height = 300, 200
-        # image = Image.new('RGB', (width, height), color='white')
-        # draw = ImageDraw.Draw(image)
-        #
-
-        #
-        # # Draw bars based on the values
-        # num_values = len(values)
-        # bar_width = width // num_values
-        # max_value = max(values)
-        # for i, value in enumerate(values):
-        #     bar_height = int(height * value / max_value)
-        #     x0 = i * bar_width
-        #     y0 = height - bar_height
-        #     x1 = (i + 1) * bar_width - 1
-        #     y1 = height - 1
-        #     draw.rectangle([x0, y0, x1, y1], fill='blue')
 
         # Save the image to a bytes buffer
         image_bytes = io.BytesIO()
         # Save the plot to the BytesIO object as a JPEG image
         # TODO adjust pca plotting accordingly with correct axis etc.
         # for alice 12 recordings and 10 fps
-        plt = plotting.get_plot_for_indices_of_current_dataset(parameter, fps=30, number_consecutive_recordings=1,
-                                                               extend_plot=extend_plot,
-                                                               pca_preprocessing=pca_preprocessing,
-                                                               recording_type=recording_type)
+        plt = drcell.util.plottingUtil.get_plot_for_indices_of_current_dataset(parameter, fps=30, number_consecutive_recordings=1,
+                                                                               extend_plot=extend_plot,
+                                                                               pca_preprocessing=pca_preprocessing,
+                                                                               recording_type=recording_type)
         plt.savefig(image_bytes, format='jpg')
         plt.close('all')
         image_content = image_bytes.getvalue()
