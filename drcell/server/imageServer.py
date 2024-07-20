@@ -1,11 +1,14 @@
 import argparse
-from http.server import BaseHTTPRequestHandler, HTTPServer
-from urllib.parse import urlparse, parse_qs
-from PIL import Image, ImageDraw
 import io
 import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from urllib.parse import urlparse, parse_qs
 
-import drcell.util.plottingUtil
+from drcell.util.plottingUtil import get_pca_plot_for_indices, get_plot_for_indices
+
+# TODO change to Server class with attributes instead of global variables
+current_dataset = None
+current_pca_preprocessed_dataset = None
 
 
 class RequestHandler(BaseHTTPRequestHandler):
@@ -84,10 +87,10 @@ class RequestHandler(BaseHTTPRequestHandler):
         # Save the plot to the BytesIO object as a JPEG image
         # TODO adjust pca plotting accordingly with correct axis etc.
         # for alice 12 recordings and 10 fps
-        plt = drcell.util.plottingUtil.get_plot_for_indices_of_current_dataset(parameter, fps=30, number_consecutive_recordings=1,
-                                                                               extend_plot=extend_plot,
-                                                                               pca_preprocessing=pca_preprocessing,
-                                                                               recording_type=recording_type)
+        plt = get_plot_for_indices_of_current_dataset(parameter, fps=30, number_consecutive_recordings=1,
+                                                      extend_plot=extend_plot,
+                                                      pca_preprocessing=pca_preprocessing,
+                                                      recording_type=recording_type)
         plt.savefig(image_bytes, format='jpg')
         plt.close('all')
         image_content = image_bytes.getvalue()
@@ -138,3 +141,28 @@ if __name__ == '__main__':
 
     input("Press Enter to stop the server...")
     stop_server()
+
+
+def get_plot_for_indices_of_current_dataset(indices, fps=30, number_consecutive_recordings=1, extend_plot=False,
+                                            pca_preprocessing=False, recording_type=None):
+    global current_dataset, current_pca_preprocessed_dataset
+    dataset = current_dataset
+    if pca_preprocessing:
+        dataset = current_pca_preprocessed_dataset
+        return get_pca_plot_for_indices(dataset, indices,
+                                        extend_plot=extend_plot)
+
+        # TODO adjust pca plotting accordingly with correct axis etc.
+    return get_plot_for_indices(dataset, indices, fps=fps,
+                                number_consecutive_recordings=number_consecutive_recordings, extend_plot=extend_plot,
+                                recording_type=recording_type)
+
+
+def update_server_dataset(new_dataset):
+    global current_dataset
+    current_dataset = new_dataset
+
+
+def update_server_pca_preprocessed_dataset(new_dataset):
+    global current_pca_preprocessed_dataset
+    current_pca_preprocessed_dataset = new_dataset

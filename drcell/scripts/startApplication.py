@@ -1,4 +1,5 @@
 import argparse
+import importlib
 import sys
 from threading import Thread
 
@@ -13,7 +14,16 @@ import startBokehServer
 # PyQt window class
 class BokehWindow(QMainWindow):
 
-    def __init__(self, port=5000, port_image=8000, app_path="main.py"):
+    def __init__(self, port=5000, port_image=8000, app_path=None):
+        if app_path is None:
+            # Load the script from the specified package and module
+            package_name = "drcell"
+            module_name = "main"
+
+            spec = importlib.util.find_spec(f"{package_name}.{module_name}")
+            if spec is None:
+                raise ImportError(f"Module {package_name}.{module_name} not found")
+            app_path = spec.origin
         super().__init__()
         self.port = port
         self.port_image = port_image
@@ -71,7 +81,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Run Bokeh server with custom app.")
     parser.add_argument("--port", type=int, default=5000, help="Port for the Bokeh server")
     parser.add_argument("--port-image", type=int, default=8000, help="Port for the image server")
-    parser.add_argument("--app-path", type=str, default="main.py", help="Path to the Bokeh application script")
+    parser.add_argument("--app-path", type=str, default=None, help="Path to the Bokeh application script")
     args = parser.parse_args()
 
     app = QApplication(sys.argv)

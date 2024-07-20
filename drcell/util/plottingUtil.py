@@ -161,21 +161,6 @@ def get_pca_plot_for_indices(trace_arrays, indices, extend_plot=False):
         return plot_and_return_pca_plot(trace_arrays, indices, background_traces=extend_plot)
 
 
-def get_plot_for_indices_of_current_dataset(indices, fps=30, number_consecutive_recordings=1, extend_plot=False,
-                                            pca_preprocessing=False, recording_type=None):
-    global current_dataset, current_pca_preprocessed_dataset
-    dataset = current_dataset
-    if pca_preprocessing:
-        dataset = current_pca_preprocessed_dataset
-        return get_pca_plot_for_indices(dataset, indices,
-                                        extend_plot=extend_plot)
-
-        # TODO adjust pca plotting accordingly with correct axis etc.
-    return get_plot_for_indices(dataset, indices, fps=fps,
-                                number_consecutive_recordings=number_consecutive_recordings, extend_plot=extend_plot,
-                                recording_type=recording_type)
-
-
 def plot_and_save_spikes(neuron_number, dataframe, output_folder, fps=30, number_consecutive_recordings=6):
     # takes selected row (fluorescence data of one cell), makes it to an array and plots it
     plt = plot_and_return_spikes(dataframe.values, neuron_number, fps=fps,

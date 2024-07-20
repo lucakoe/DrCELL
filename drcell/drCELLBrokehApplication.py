@@ -22,6 +22,7 @@ import drcell.util
 from drcell.dimensionalReduction.DimensionalReductionObject import return_pca_diagnostic_plot
 from drcell.server import imageServer
 
+# TODO make Application class with those as attributes instead of global variables
 current_dataset = None
 current_pca_preprocessed_dataset = None
 
@@ -925,9 +926,12 @@ def plot_bokeh(input_file_paths, reduction_functions=None,
         # for Bokeh Server
         curdoc().add_root(layout)
     update_stats()
+    update_graph(attr=None, old=None, new=None)
     print("Finished loading Bokeh Plotting Interface")
 
 
 def update_current_dataset(dataset):
-    global current_dataset
+    global current_dataset, current_pca_preprocessed_dataset
     current_dataset = dataset
+    imageServer.update_server_dataset(current_dataset)
+    imageServer.update_server_pca_preprocessed_dataset(current_pca_preprocessed_dataset)

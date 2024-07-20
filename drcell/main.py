@@ -54,10 +54,11 @@ for matlab_dataset in included_legacy_matlab_datasets:
     input_file_paths.extend(converted_input_file_paths)
 
 # checks if there is a image server port given in the arguments; if not defaults to 8000
-image_server_port = int(sys.argv[1]) if len(sys.argv) > 1 else '8000'
+image_server_port = int(sys.argv[1]) if len(sys.argv) > 1 else 8000
 
 # loads parameters and default values from config file; out of box functions get assigned additionally
-with open('config/reduction_functions_config.json', 'r') as json_file:
+#TODO remove magic string
+with open('./drcell/config/reduction_functions_config.json', 'r') as json_file:
     reduction_functions = json.load(json_file)
 
 reduction_functions["UMAP"]["function"] = drcell.dimensionalReduction.umap.generate_umap
