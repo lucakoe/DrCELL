@@ -56,50 +56,11 @@ for matlab_dataset in included_legacy_matlab_datasets:
 # checks if there is a image server port given in the arguments; if not defaults to 8000
 image_server_port = int(sys.argv[1]) if len(sys.argv) > 1 else 8000
 
-# loads parameters and default values from config file; out of box functions get assigned additionally
-#TODO remove magic string
-with open('./drcell/config/reduction_functions_config.json', 'r') as json_file:
-    reduction_functions = json.load(json_file)
-
-reduction_functions["UMAP"]["function"] = drcell.dimensionalReduction.umap.generate_umap
-reduction_functions["UMAP"]["diagnostic_functions"] = drcell.dimensionalReduction.umap.generate_umap_diagnostic_plot
-
-reduction_functions["t-SNE"]["function"] = drcell.dimensionalReduction.tsne.generate_t_sne
-reduction_functions["t-SNE"]["diagnostic_functions"] = None
-
-reduction_functions["PHATE"]["function"] = drcell.dimensionalReduction.phate.generate_phate
-reduction_functions["PHATE"]["diagnostic_functions"] = None
-# Example custom function
-# # n_components has to be 2 in custom functions; first parameter has to be data!!!
-# reduction_functions["custom_function_example"] = {"function": util.custom_function,
-#                                 "diagnostic_functions": {"diagnostic_plots": util.custom_diagnostic_function},
-#                                 "numeric_parameters": {"numeric_example_parameter_1": {"start": 5, "end": 50, "step": 1, "value": 30},
-#                                                        "numeric_example_parameter_2": {"start": 10, "end": 200, "step": 10,
-#                                                                          "value": 200},
-#                                                        "numeric_example_parameter_n": {"start": 250, "end": 1000, "step": 10, "value": 1000},
-#                                                        },
-#                                 "bool_parameters": {"bool_example_parameter_1": False, "bool_example_parameter_2": True, "bool_example_parameter_n": False},
-#                                 "nominal_parameters": {
-#                                     "nominal_example_parameter_1": {"options": ["example_option_1", "example_option_2", "example_option_n"],
-#                                                                    "default_option": "example_option_2"},
-#                                     "nominal_example_parameter_2": {
-#                                         "options": ["example_option_1", "example_option_2", "example_option_n"],
-#                                         "default_option": "example_option_1"},
-#                                     "nominal_example_parameter_n": {
-#                                         "options": ["example_option_1", "example_option_2", "example_option_n"],
-#                                         "default_option": "example_option_n"}
-#                                 },
-#                                                   "constant_parameters": {"n_components": (2),
-#                                                                           "constant_parameter_1": ("example_parameter"),
-#                                                                           "constant_parameter_2": (5),
-#                                                                           "constant_parameter_n": (True)}}
-
-
 if __name__ == '__main__':
     bokeh_show = True
 
 # loads bokeh interface
-drcell.drCELLBrokehApplication.plot_bokeh(input_file_paths, reduction_functions=reduction_functions,
+drcell.drCELLBrokehApplication.plot_bokeh(input_file_paths, reduction_functions=None,
                                           bokeh_show=bokeh_show, color_palette=color_palette, debug=debug,
                                           experimental=experimental, output_path=output_path,
                                           image_server_port=image_server_port)

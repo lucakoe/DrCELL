@@ -19,7 +19,7 @@ from matplotlib import pyplot as plt
 
 import drcell.dimensionalReduction
 import drcell.util
-from drcell.dimensionalReduction.DimensionalReductionObject import return_pca_diagnostic_plot
+from drcell.dimensionalReduction import *
 from drcell.server.ImageServer import ImageServer
 
 
@@ -27,6 +27,7 @@ def plot_bokeh(input_file_paths, reduction_functions=None,
                bokeh_show=True, output_path="./data/output/", debug=False, experimental=False,
                hover_image_generation_function=None,
                color_palette=Muted9, image_server_port=8000):
+    reduction_functions_config_path = os.path.abspath('./drcell/config/reduction_functions_config.json')
     # TODO make Application class with those as attributes instead of global variables
     current_dataset = None
     current_pca_preprocessed_dataset = None
@@ -34,34 +35,22 @@ def plot_bokeh(input_file_paths, reduction_functions=None,
     image_server.start_server()
     print("Starting DrCELL")
     if reduction_functions is None:
-        # loads parameters and default values from config file; out of box functions get assigned additionally
-        with open('reduction_functions_config.json', 'r') as json_file:
-            reduction_functions = json.load(json_file)
+        reduction_functions = []
 
-        reduction_functions["UMAP"]["function"] = drcell.dimensionalReduction.umap.generate_umap
-        reduction_functions["UMAP"][
-            "diagnostic_functions"] = drcell.dimensionalReduction.umap.generate_umap_diagnostic_plot
-
-        reduction_functions["t-SNE"]["function"] = drcell.dimensionalReduction.tsne.generate_t_sne
-        reduction_functions["t-SNE"]["diagnostic_functions"] = None
-
-        reduction_functions["PHATE"]["function"] = drcell.dimensionalReduction.phate.generate_phate
-        reduction_functions["PHATE"]["diagnostic_functions"] = None
-    default_parameters_reduction_function = {}
-    default_reduction_function = list(reduction_functions.keys())[0]
-    for parameter in reduction_functions[default_reduction_function]["numerical_parameters"].keys():
-        default_parameters_reduction_function[parameter] = \
-            reduction_functions[default_reduction_function]["numerical_parameters"][parameter]["value"]
-    for parameter in reduction_functions[default_reduction_function]["bool_parameters"].keys():
-        default_parameters_reduction_function[parameter] = \
-            reduction_functions[default_reduction_function]["bool_parameters"][parameter]
-    for parameter in reduction_functions[default_reduction_function]["nominal_parameters"].keys():
-        default_parameters_reduction_function[parameter] = \
-            reduction_functions[default_reduction_function]["nominal_parameters"][parameter]["default_option"]
-    for parameter in reduction_functions[default_reduction_function]["constant_parameters"].keys():
-        default_parameters_reduction_function[parameter] = \
-            reduction_functions[default_reduction_function]["constant_parameters"][
-                parameter]
+    reduction_functions = [drcell.dimensionalReduction.UMAPDRObject(),
+                           drcell.dimensionalReduction.TSNEDRObject(),
+                           drcell.dimensionalReduction.PHATEDRObject()] + reduction_functions
+    default_reduction_function_name = reduction_functions[0].name
+    # loads parameters and default values from config file
+    if os.path.exists(reduction_functions_config_path):
+        with open(reduction_functions_config_path, 'r') as json_file:
+            reduction_function_config = json.load(json_file)
+        for reduction_function in reduction_functions:
+            if reduction_function.name in reduction_function_config.keys():
+                print(
+                    f"Loading {reduction_function.name} config from {os.path.basename(reduction_functions_config_path)}")
+                reduction_function.change_params(reduction_function_config[reduction_function.name])
+    reduction_functions = {dr_object.get_name(): dr_object for dr_object in reduction_functions}
 
     datas = {}
     legend_dfs = {}
@@ -89,11 +78,9 @@ def plot_bokeh(input_file_paths, reduction_functions=None,
         if ("recording_type" not in configs[title]) or configs[title]["recording_type"] is None:
             configs[title]["recording_type"] = "None"
 
-        temp_umap_out = drcell.dimensionalReduction.DimensionalReductionObject.get_dimensional_reduction_out(
-            default_reduction_function, datas[title],
-            dump_folder_path=file_folder_paths[title],
-            reduction_functions=reduction_functions,
-            reduction_params=default_parameters_reduction_function,
+        temp_umap_out = reduction_functions[default_reduction_function_name].get_dimensional_reduction_out(
+            datas[title], dump_folder_path=file_folder_paths[title],
+            reduction_params=reduction_functions[default_reduction_function_name].get_default_params(),
             pca_preprocessing=False)
 
         if debug: print('Umap vals: ' + str(temp_umap_out.shape))
@@ -264,40 +251,45 @@ def plot_bokeh(input_file_paths, reduction_functions=None,
     reduction_functions_widgets = {}
     # adds all the parameters from the reduction function as widgets to the interface.
     # Numeric parameters get added as Sliders, bool as checkboxes, select as Select and Constants get added later on.
-    for reduction_function in reduction_functions.keys():
-        reduction_functions_layouts[reduction_function] = column()
-        reduction_functions_widgets[reduction_function] = {}
+    for reduction_function_name in reduction_functions.keys():
+        reduction_functions_layouts[reduction_function_name] = column()
+        reduction_functions_widgets[reduction_function_name] = {}
+        reduction_function_params_dict = reduction_functions[reduction_function_name].get_DR_parameters_dict()
 
-        # TODO exchange hardcoded feature with generalized diagnostic plot feature
-        if reduction_function == "UMAP":
-            reduction_functions_widgets[reduction_function]["diagnostic_plots"] = Button(label="Diagnostic Plots")
-            reduction_functions_layouts[reduction_function].children.append(
-                reduction_functions_widgets[reduction_function]["diagnostic_plots"])
+        for diagnostic_function_name in reduction_functions[reduction_function_name].list_diagnostic_functions_names():
+            reduction_functions_widgets[reduction_function_name][diagnostic_function_name] = Button(
+                label=diagnostic_function_name)
+            reduction_functions_layouts[reduction_function_name].children.append(
+                reduction_functions_widgets[reduction_function_name][diagnostic_function_name])
 
-        for numerical_parameter in reduction_functions[reduction_function]["numerical_parameters"].keys():
-            parameter_range = reduction_functions[reduction_function]["numerical_parameters"][numerical_parameter]
-            reduction_functions_widgets[reduction_function][numerical_parameter] = Slider(title=numerical_parameter,
-                                                                                          **parameter_range)
-            reduction_functions_layouts[reduction_function].children.append(
-                reduction_functions_widgets[reduction_function][numerical_parameter])
+        for numerical_parameter in reduction_function_params_dict["numerical_parameters"].keys():
+            parameter_range = reduction_function_params_dict["numerical_parameters"][numerical_parameter]
+            reduction_functions_widgets[reduction_function_name][numerical_parameter] = Slider(
+                title=numerical_parameter,
+                **parameter_range)
+            reduction_functions_layouts[reduction_function_name].children.append(
+                reduction_functions_widgets[reduction_function_name][numerical_parameter])
 
-        for bool_parameter in reduction_functions[reduction_function]["bool_parameters"].keys():
-            reduction_functions_widgets[reduction_function][bool_parameter] = Checkbox(label=bool_parameter, active=
-            reduction_functions[reduction_function]["bool_parameters"][bool_parameter])
-            reduction_functions_layouts[reduction_function].children.append(
-                reduction_functions_widgets[reduction_function][bool_parameter])
+        for bool_parameter in reduction_function_params_dict["bool_parameters"].keys():
+            reduction_functions_widgets[reduction_function_name][bool_parameter] = Checkbox(label=bool_parameter,
+                                                                                            active=
+                                                                                            reduction_function_params_dict[
+                                                                                                "bool_parameters"][
+                                                                                                bool_parameter])
+            reduction_functions_layouts[reduction_function_name].children.append(
+                reduction_functions_widgets[reduction_function_name][bool_parameter])
 
-        for nominal_parameter in reduction_functions[reduction_function]["nominal_parameters"].keys():
+        for nominal_parameter in reduction_function_params_dict["nominal_parameters"].keys():
             nominal_parameters_options = \
-                reduction_functions[reduction_function]["nominal_parameters"][nominal_parameter]["options"]
+                reduction_function_params_dict["nominal_parameters"][nominal_parameter]["options"]
             nominal_parameters_default_option = \
-                reduction_functions[reduction_function]["nominal_parameters"][nominal_parameter]["default_option"]
-            reduction_functions_widgets[reduction_function][nominal_parameter] = Select(
+                reduction_function_params_dict["nominal_parameters"][nominal_parameter]["default_option"]
+            reduction_functions_widgets[reduction_function_name][nominal_parameter] = Select(
                 value=nominal_parameters_default_option, options=nominal_parameters_options)
-            reduction_functions_layouts[reduction_function].children.append(
-                reduction_functions_widgets[reduction_function][nominal_parameter])
+            reduction_functions_layouts[reduction_function_name].children.append(
+                reduction_functions_widgets[reduction_function_name][nominal_parameter])
 
-        dimensional_reduction_parameter_layouts.children.append(reduction_functions_layouts[reduction_function])
+        dimensional_reduction_parameter_layouts.children.append(reduction_functions_layouts[reduction_function_name])
 
     dimensional_reduction_layout = column(dimensional_reduction_title_div, blank_div, select_dimensional_reduction,
                                           buffer_parameters_button, buffer_parameters_status,
@@ -359,26 +351,31 @@ def plot_bokeh(input_file_paths, reduction_functions=None,
 
     def get_current_dimension_reduction_parameters():
         out = {}
-        reduction_function = select_dimensional_reduction.value
-        if reduction_function != 'None':
-            for numeric_parameter in reduction_functions[reduction_function]["numerical_parameters"].keys():
-                value = reduction_functions_widgets[reduction_function][numeric_parameter].value
+        reduction_function_name = select_dimensional_reduction.value
+        if reduction_function_name != 'None':
+            for numeric_parameter in reduction_functions[reduction_function_name].get_DR_parameters_dict()[
+                "numerical_parameters"].keys():
+                value = reduction_functions_widgets[reduction_function_name][numeric_parameter].value
                 if type(value) == float:
                     # rounds the value to the same amount of numbers behind the decimal point as the step of the slider.
                     # this is to prevent weird behavior with floats when buffering values
                     round(value, drcell.util.generalUtil.get_decimal_places(
-                        reduction_functions_widgets[reduction_function][numeric_parameter].step))
+                        reduction_functions_widgets[reduction_function_name][numeric_parameter].step))
                 out[numeric_parameter] = value
 
-            for bool_parameter in reduction_functions[reduction_function]["bool_parameters"].keys():
-                out[bool_parameter] = reduction_functions_widgets[reduction_function][bool_parameter].active
+            for bool_parameter in reduction_functions[reduction_function_name].get_DR_parameters_dict()[
+                "bool_parameters"].keys():
+                out[bool_parameter] = reduction_functions_widgets[reduction_function_name][bool_parameter].active
 
-            for nominal_parameter in reduction_functions[reduction_function]["nominal_parameters"].keys():
-                out[nominal_parameter] = reduction_functions_widgets[reduction_function][nominal_parameter].value
+            for nominal_parameter in reduction_functions[reduction_function_name].get_DR_parameters_dict()[
+                "nominal_parameters"].keys():
+                out[nominal_parameter] = reduction_functions_widgets[reduction_function_name][nominal_parameter].value
 
-            for constant_parameter in reduction_functions[reduction_function]["constant_parameters"].keys():
-                out[constant_parameter] = reduction_functions[reduction_function]["constant_parameters"][
-                    constant_parameter]
+            for constant_parameter in reduction_functions[reduction_function_name].get_DR_parameters_dict()[
+                "constant_parameters"].keys():
+                out[constant_parameter] = \
+                    reduction_functions[reduction_function_name].get_DR_parameters_dict()["constant_parameters"][
+                        constant_parameter]
 
         return out
 
@@ -473,42 +470,52 @@ def plot_bokeh(input_file_paths, reduction_functions=None,
         if enable_pca_checkbox.active or select_dimensional_reduction.value == "None":
             if scatter_plot_pca_preprocessing_hover_tool not in plot_figure.tools:
                 plot_figure.add_tools(scatter_plot_pca_preprocessing_hover_tool)
+                pca_diagnostic_plot_button.disabled = False
             # this is to prevent the pca settings to be used if there is no dimensional reduction selected, so the data still gets reduced to 2 dimensions
             if select_dimensional_reduction.value == "None":
                 enable_pca_checkbox.active = True
                 enable_pca_checkbox.disabled = True
                 select_pca_dimensions_slider.value = 2
                 select_pca_dimensions_slider.disabled = True
+                buffer_parameters_button.disabled = True
+                current_pca_preprocessed_dataset = DimensionalReductionObject.apply_pca_preprocessing(
+                    current_data, n_components=int(
+                        select_pca_dimensions_slider.value))
+                reduction_function_output = current_pca_preprocessed_dataset
             else:
                 enable_pca_checkbox.disabled = False
                 select_pca_dimensions_slider.disabled = False
-            pca_diagnostic_plot_button.disabled = False
-            current_pca_preprocessed_dataset = drcell.dimensionalReduction.DimensionalReductionObject.apply_pca_preprocessing(
-                current_data, n_components=int(
-                    select_pca_dimensions_slider.value))
-            umap_result = drcell.dimensionalReduction.DimensionalReductionObject.get_dimensional_reduction_out(
-                select_dimensional_reduction.value, current_data,
-                dump_folder_path=file_folder_paths[select_data.value],
-                reduction_functions=reduction_functions,
-                reduction_params=get_current_dimension_reduction_parameters(),
-                pca_preprocessing=True,
-                pca_n_components=int(select_pca_dimensions_slider.value))
+                buffer_parameters_button.disabled = False
+                reduction_function_output = reduction_functions[
+                    select_dimensional_reduction.value].get_dimensional_reduction_out(
+                    current_data,
+                    dump_folder_path=file_folder_paths[select_data.value],
+                    reduction_params=get_current_dimension_reduction_parameters(),
+                    pca_preprocessing=True,
+                    pca_n_components=int(select_pca_dimensions_slider.value))
+                current_pca_preprocessed_dataset = DimensionalReductionObject.apply_pca_preprocessing(
+                    current_data, n_components=int(
+                        select_pca_dimensions_slider.value))
+
+
+
         else:
             select_pca_dimensions_slider.disabled = True
             pca_diagnostic_plot_button.disabled = True
+            buffer_parameters_button.disabled = False
             if scatter_plot_pca_preprocessing_hover_tool in plot_figure.tools:
                 plot_figure.remove_tools(scatter_plot_pca_preprocessing_hover_tool)
             current_pca_preprocessed_dataset = None
-            umap_result = drcell.dimensionalReduction.DimensionalReductionObject.get_dimensional_reduction_out(
-                select_dimensional_reduction.value, current_data,
-                dump_folder_path=
-                file_folder_paths[select_data.value],
-                reduction_functions=reduction_functions,
+            reduction_function_output = reduction_functions[
+                select_dimensional_reduction.value].get_dimensional_reduction_out(
+                current_data,
+                dump_folder_path=file_folder_paths[select_data.value],
                 reduction_params=get_current_dimension_reduction_parameters(),
                 pca_preprocessing=False)
 
-        datasource_df['x'], datasource_df['y'] = umap_result[:, 0], umap_result[:, 1]
-        data_frames[select_data.value]['x'], data_frames[select_data.value]['y'] = umap_result[:, 0], umap_result[:, 1]
+        datasource_df['x'], datasource_df['y'] = reduction_function_output[:, 0], reduction_function_output[:, 1]
+        data_frames[select_data.value]['x'], data_frames[select_data.value]['y'] = reduction_function_output[:,
+                                                                                   0], reduction_function_output[:, 1]
         # datasource.data.update({'x': umap_result[:, 0], 'y': umap_result[:, 1]})
         initial_df = pd.DataFrame.copy(datasource_df)
         if len(or_filter_multi_choice.value) != 0:
@@ -536,10 +543,10 @@ def plot_bokeh(input_file_paths, reduction_functions=None,
                 if debug: print(datasource_df[options_filter_multi_choice_values[option][0]])
 
         if debug: print(datasource_df)
-        umap_result = datasource_df[['x', 'y']].values
+        reduction_function_output = datasource_df[['x', 'y']].values
         if update_clusters_toggle.active:
             clusters = []
-            if len(umap_result) > 0:
+            if len(reduction_function_output) > 0:
                 # Apply HDBSCAN clustering
                 clusterer = hdbscan.HDBSCAN(min_cluster_size=min_cluster_size_slider.value,
                                             min_samples=min_samples_slider.value,
@@ -549,7 +556,7 @@ def plot_bokeh(input_file_paths, reduction_functions=None,
                                                 cluster_selection_method_toggle.active],
                                             metric=select_metric.value,
                                             cluster_selection_epsilon=cluster_selection_epsilon_slider.value)
-                clusters = clusterer.fit_predict(umap_result)
+                clusters = clusterer.fit_predict(reduction_function_output)
                 nonlocal current_clusterer
                 current_clusterer = clusterer
 
@@ -569,11 +576,12 @@ def plot_bokeh(input_file_paths, reduction_functions=None,
         update_grid(attr=None, old=None, new=None)
         datasource.data.update(datasource.data)
         update_category(attr=None, old=None, new=None)
-        update_current_dataset(current_data, image_server=image_server)
+        update_current_dataset(current_data, current_pca_preprocessed_dataset, image_server=image_server)
 
-    def update_current_dataset(dataset, image_server=None):
+    def update_current_dataset(dataset, pca_preprocessed_dataset, image_server=None):
         nonlocal current_dataset, current_pca_preprocessed_dataset
         current_dataset = dataset
+        current_pca_preprocessed_dataset= pca_preprocessed_dataset
         if not image_server is None:
             image_server.update_dataset(current_dataset)
             image_server.update_pca_preprocessed_dataset(current_pca_preprocessed_dataset)
@@ -773,7 +781,7 @@ def plot_bokeh(input_file_paths, reduction_functions=None,
         pca_operator = sklearn.decomposition.PCA(n_components=int(select_pca_dimensions_slider.value))
         pca = pca_operator.fit_transform(datas[select_data.value])
         diagnostic_data = pca_operator.explained_variance_ratio_
-        return_pca_diagnostic_plot(diagnostic_data).show()
+        DimensionalReductionObject.return_pca_diagnostic_plot(diagnostic_data).show()
 
     def hdbscan_diagnostic_plot_button_callback():
         nonlocal current_clusterer
@@ -787,95 +795,28 @@ def plot_bokeh(input_file_paths, reduction_functions=None,
         #                                       edge_linewidth=2)
         # plt.show()
 
-    def umap_diagnostic_plot_button_callback():
-        global current_dataset
+    def diagnostic_plot_button_callback(diagnostic_function_name: str):
+        nonlocal current_dataset
         parm = get_current_dimension_reduction_parameters()
         parm["data"] = current_dataset
-        drcell.dimensionalReduction.umap.generate_umap_diagnostic_plot(**parm)
+        # returns the corresponding diagnostic function and executes it with data as parameter
+        reduction_functions[select_dimensional_reduction.value].get_diagnostic_function(diagnostic_function_name)(
+            **parm)
 
     def buffer_parameters():
-
-        def iterate_over_variables(variable_names, variables_values, current_combination=[]):
-            if not variables_values:
-                # Base case: if no more variables, print the current combination
-                # print(current_combination)
-                if enable_pca_checkbox.active:
-                    drcell.dimensionalReduction.DimensionalReductionObject.get_dimensional_reduction_out(
-                        select_dimensional_reduction.value, datas[select_data.value],
-                        dump_folder_path=file_folder_paths[select_data.value],
-                        reduction_functions=reduction_functions,
-                        # adds the variable name back to the current combination and makes a dict to be used in the function as parameters
-                        reduction_params=dict(zip(variable_names, current_combination)),
-                        pca_preprocessing=True,
-                        pca_n_components=select_pca_dimensions_slider.value
-                    )
-                else:
-                    drcell.dimensionalReduction.DimensionalReductionObject.get_dimensional_reduction_out(
-                        select_dimensional_reduction.value, datas[select_data.value],
-                        dump_folder_path=file_folder_paths[select_data.value],
-                        reduction_functions=reduction_functions,
-                        # adds the variable name back to the current combination and makes a dict to be used in the function as parameters
-                        reduction_params=dict(zip(variable_names, current_combination)),
-                        pca_preprocessing=False)
-                # TODO add buffering for PCA preprocessing
-
-            else:
-                # Recursive case: iterate over the values of the current variable
-                current_variable_values = variables_values[0]
-                for value in current_variable_values:
-                    # Recursively call the function with the next variable and the updated combination
-                    iterate_over_variables(variable_names, variables_values[1:], current_combination + [value])
-
         nonlocal buffer_parameters_status
         # TODO fix buffer status
-        buffer_parameters_status.text = "Start buffering"
-        print("Start buffering")
-
         if select_dimensional_reduction.value != "None":
-            # creates an array with the variable and one with all the possible values in the range
-            variable_names = []
-            variable_values = []
-            reduction_function = select_dimensional_reduction.value
-            for parameter_type in reduction_functions[reduction_function].keys():
-                if parameter_type == "numerical_parameters":
-                    for variable_name in reduction_functions[reduction_function]["numerical_parameters"].keys():
-                        parameter_range = reduction_functions[reduction_function]["numerical_parameters"][
-                            variable_name].copy()
-                        parameter_range.pop('value')
-                        # rename key end to stop
-                        parameter_range["stop"] = parameter_range.pop("end")
-                        # add one step in the end to make last value of slider inclusive
-                        parameter_range["stop"] = parameter_range["stop"] + parameter_range["step"]
-                        values = np.arange(**parameter_range).tolist()
-                        if type(parameter_range["step"]) is float:
-                            # rounds values to decimal place of corresponding step variable, to avoid weird float behaviour
-                            values = [round(x, drcell.util.generalUtil.get_decimal_places(parameter_range["step"])) for
-                                      x in values]
-                        variable_values.append(values)
-                        variable_names.append(variable_name)
-                elif parameter_type == "bool_parameters":
-                    for variable_name in reduction_functions[reduction_function]["bool_parameters"].keys():
-                        variable_values.append([False, True])
-                        variable_names.append(variable_name)
+            buffer_parameters_status.text = "Start buffering"
+            print("Start buffering")
 
-                elif parameter_type == "nominal_parameters":
-                    for variable_name in reduction_functions[reduction_function]["nominal_parameters"].keys():
-                        variable_values.append(
-                            reduction_functions[reduction_function]["nominal_parameters"][variable_name][
-                                "options"].copy())
-                        variable_names.append(variable_name)
-
-                elif parameter_type == "constant_parameters":
-                    for variable_name in reduction_functions[reduction_function]["constant_parameters"].keys():
-                        variable_values.append(
-                            [reduction_functions[reduction_function]["constant_parameters"][variable_name]])
-                        variable_names.append(variable_name)
-
-            # generates all combinations of variable value combinations
-            iterate_over_variables(variable_names, variable_values)
-
-        buffer_parameters_status.visible = False
-        print("Finished buffering")
+            reduction_functions[select_dimensional_reduction.value].buffer_DR_in_paramter_range(datas[select_data.value],
+                                                                                                file_folder_paths[
+                                                                                                    select_data.value],
+                                                                                                pca_preprocessing=enable_pca_checkbox.active,
+                                                                                                pca_n_components=select_pca_dimensions_slider.value)
+            buffer_parameters_status.visible = False
+            print("Finished buffering")
 
     # Attach the callback function to Interface widgets
 
@@ -897,17 +838,23 @@ def plot_bokeh(input_file_paths, reduction_functions=None,
     select_dimensional_reduction.on_change('value', update_dimensional_reduction)
     buffer_parameters_button.on_click(buffer_parameters)
     # assign the callback function for every parameter
-    for reduction_function in reduction_functions.keys():
-        if reduction_function == "UMAP":
-            reduction_functions_widgets[reduction_function]["diagnostic_plots"].on_click(
-                umap_diagnostic_plot_button_callback)
-        for numerical_parameter in reduction_functions[reduction_function]["numerical_parameters"].keys():
-            reduction_functions_widgets[reduction_function][numerical_parameter].on_change('value_throttled',
-                                                                                           update_graph)
-        for bool_parameter in reduction_functions[reduction_function]["bool_parameters"].keys():
-            reduction_functions_widgets[reduction_function][bool_parameter].on_change("active", update_graph)
-        for nominal_parameter in reduction_functions[reduction_function]["nominal_parameters"].keys():
-            reduction_functions_widgets[reduction_function][nominal_parameter].on_change('value', update_graph)
+    for reduction_function_name in reduction_functions.keys():
+        for diagnostic_function_name in reduction_functions[reduction_function_name].list_diagnostic_functions_names():
+            # assigns the corresponding diagnostic function button to a general callback function, that executes
+            # the function based on the label name (that corresponds to the name of the diagnostic function)
+            # and the currently selected reduction function
+            reduction_functions_widgets[reduction_function_name][diagnostic_function_name].on_click(
+                lambda: diagnostic_plot_button_callback(diagnostic_function_name))
+        for numerical_parameter in reduction_functions[reduction_function_name].get_DR_parameters_dict()[
+            "numerical_parameters"].keys():
+            reduction_functions_widgets[reduction_function_name][numerical_parameter].on_change('value_throttled',
+                                                                                                update_graph)
+        for bool_parameter in reduction_functions[reduction_function_name].get_DR_parameters_dict()[
+            "bool_parameters"].keys():
+            reduction_functions_widgets[reduction_function_name][bool_parameter].on_change("active", update_graph)
+        for nominal_parameter in reduction_functions[reduction_function_name].get_DR_parameters_dict()[
+            "nominal_parameters"].keys():
+            reduction_functions_widgets[reduction_function_name][nominal_parameter].on_change('value', update_graph)
 
     # Cluster Selection
     highlight_cluster_checkbox.on_change('active', update_current_cluster)
