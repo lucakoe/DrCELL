@@ -1,4 +1,7 @@
+import glob
 import importlib
+import os
+import sys
 
 from bokeh.application import Application
 from bokeh.application.handlers import ScriptHandler
@@ -9,7 +12,7 @@ import drcell.util
 
 
 class DrCELLBokehServer:
-    def __init__(self, port=5000, port_image=8000, app_path=None):
+    def __init__(self, file_or_folder_path: str = sys.argv[0], port=5000, port_image=8000, app_path=None):
         self.initial_port = port
         self.port = port
         self.port_image = port_image
@@ -17,17 +20,23 @@ class DrCELLBokehServer:
         if self.app_path is None:
             # Load the script from the specified package and module
             package_name = "drcell"
-            module_name = "main"
+            module_name = "drCELLBrokehApplication"
 
             spec = importlib.util.find_spec(f"{package_name}.{module_name}")
             if spec is None:
                 raise ImportError(f"Module {package_name}.{module_name} not found")
             self.app_path = spec.origin
+        self.dr_cell_file_paths = []
+        if os.path.isdir(file_or_folder_path):
+            for path in glob.glob(os.path.join(file_or_folder_path, '*.h5')):
+                self.dr_cell_file_paths.append(os.path.abspath(path))
+        elif os.path.isfile(file_or_folder_path):
+            self.dr_cell_file_paths = [file_or_folder_path]
         self.server_instance = None
 
     def start_server(self):
-        argv = [str(self.port_image)]
-
+        argv = ['--port-image', str(self.port_image), '--dr_cell_file_paths']
+        argv.extend(self.dr_cell_file_paths)
         # Create a Bokeh application
         bokeh_app = Application(ScriptHandler(filename=self.app_path, argv=argv))
         self.port = self.initial_port

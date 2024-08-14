@@ -7,7 +7,7 @@ import pandas as pd
 from scipy import io as sio
 
 
-def save_as_dr_cell_h5(file, data_df, legend_df, config=None):
+def save_as_dr_cell_h5(file: str, data_df: pd.DataFrame, legend_df: pd.DataFrame, config: dict = None) -> None:
     # TODO maybe change to easier hdf5 structure for direct matlab export
     # Save dataframes and config to HDF5
     with h5py.File(file, 'w') as hdf:
@@ -37,7 +37,7 @@ def save_as_dr_cell_h5(file, data_df, legend_df, config=None):
         store.append('legend_df', legend_df)
 
 
-def load_dr_cell_h5(file):
+def load_dr_cell_h5(file: str) -> (pd.DataFrame, pd.DataFrame, dict):
     with h5py.File(file, 'r') as hdf:
         # first version
         # # Read dataframes
@@ -57,6 +57,18 @@ def load_dr_cell_h5(file):
     return data_df, legend_df, config
 
 
+def validate_drcell_file(file: str) -> bool:
+    try:
+        data_df, legend_df, config = load_dr_cell_h5(file)
+    except Exception:
+        return False
+    if isinstance(data_df, pd.DataFrame) and isinstance(legend_df, pd.DataFrame) and (
+            config is None or isinstance(config, dict)):
+        return True
+    else:
+        return False
+
+
 def convert_to_hdf5_compatible(array):
     # Convert object dtypes to fixed-length byte strings
     if array.dtype == object:
@@ -64,7 +76,7 @@ def convert_to_hdf5_compatible(array):
     return array
 
 
-def load_and_preprocess_mat_data_AD_IL(c_file, recording_type='2P'):
+def load_and_preprocess_mat_data_AD_IL(c_file: str, recording_type: str = '2P'):
     # load data
     g = sio.loadmat(c_file)
     # g = h5py.File(cFile,'r')
@@ -160,7 +172,7 @@ def load_and_preprocess_mat_data_AD_IL(c_file, recording_type='2P'):
     return umap_df, matrix_legend_df, Y
 
 
-def convert_data_AD_IL(input_file_path, output_path, recording_type=None):
+def convert_data_AD_IL(input_file_path: str, output_path: str, recording_type: str = None):
     data_variables = []
     display_hover_variables = []
     if recording_type == "Ephys":
@@ -218,3 +230,38 @@ def convert_data_AD_IL(input_file_path, output_path, recording_type=None):
                                            os.path.splitext(os.path.basename(input_file_path))[0] + f"_{title}.h5")
         save_as_dr_cell_h5(output_files[title], cleaned_data_dfs[title], matrix_legend_dfs[title], config=config)
     return list(output_files.values())
+
+
+# TODO work in progress, not final yet
+def load_and_preprocess_example_mat_data(c_file: str):
+    # load data
+    example_mat_file = sio.loadmat(c_file)
+    data_array = np.concatenate((example_mat_file["neuron_PSTH_lick_left_correct"],
+                                 example_mat_file["neuron_PSTH_lick_right_correct"]), axis=1)
+    matrix_array = np.concatenate((example_mat_file["neuron_info_cell_type"],
+                                   example_mat_file["neuron_info_photoinhibition"],
+                                   example_mat_file["neuron_info_activity_mode_w"],
+                                   example_mat_file["neuron_info_connectivity"],
+                                   example_mat_file["neuron_info_depth"],
+                                   example_mat_file["neuron_info_mice_session"]), axis=1)
+    data_df = pd.DataFrame(data_array)
+    matrix_df = pd.DataFrame(matrix_array,
+                             columns=["cell_type", "photoinhibition", "activity_mode_w_c0", "activity_mode_w_c1",
+                                      "activity_mode_w_c2", "activity_mode_w_c3", "activity_mode_w_c4",
+                                      "activity_mode_w_c5", "connectivity_c0", "connectivity_c1", "connectivity_c2",
+                                      "depth", "mice_session_c0", "mice_session_c1", "mice_session_c2",
+                                      "mice_session_c3"])
+    # variables from the input data, that is selectable in the Color and Filter setting
+    data_variables = ["cell_type", "photoinhibition", "Task", "RedNeurons"]
+    # variables from the input data, that gets displayed in the hover tool
+    display_hover_variables = ["pdIndex", "depth", "cell_type", "photoinhibition"]
+    config = {
+        "recording_type": "2P",
+        "data_variables": data_variables,
+        "display_hover_variables": display_hover_variables,
+    }
+    return data_df, matrix_df, config
+    print(g)
+
+    # g = h5py.File(cFile,'r')
+    # X = np.array(g['X'])

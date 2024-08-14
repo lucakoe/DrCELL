@@ -1,10 +1,11 @@
+import argparse
 import datetime
 import json
 import os
 import random
+import sys
 
 import hdbscan
-import numpy as np
 import pandas as pd
 import scipy
 import sklearn.decomposition
@@ -13,9 +14,15 @@ from bokeh.io import show, curdoc
 from bokeh.layouts import column, row
 from bokeh.models import ColumnDataSource, HoverTool, Div, Select, Button, MultiChoice, Checkbox, TextInput, Slider, \
     RadioGroup, ColorBar, CategoricalColorMapper
-from bokeh.palettes import Muted9
+from bokeh.palettes import Muted9, Paired12
 from bokeh.plotting import figure
-from matplotlib import pyplot as plt
+
+# Get the absolute path of the current file
+project_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# change working directory, because Bokeh Server doesn't recognize it otherwise
+os.chdir(os.path.join(project_path))
+# add to project Path so Bokeh Server can import other python files correctly
+sys.path.append(project_path)
 
 import drcell.dimensionalReduction
 import drcell.util
@@ -23,11 +30,43 @@ from drcell.dimensionalReduction import *
 from drcell.server.ImageServer import ImageServer
 
 
-def plot_bokeh(input_file_paths, reduction_functions=None,
-               bokeh_show=True, output_path="./data/output/", debug=False, experimental=False,
+def parse_arguments(argv: list) -> argparse.Namespace:
+    """
+    Parse command line arguments for the Bokeh Application.
+
+    Args:
+        argv (list): List of command line arguments.
+
+    Returns:
+        argparse.Namespace: Parsed command line arguments.
+    """
+    parser = argparse.ArgumentParser(description="Bokeh Application Arguments")
+    parser.add_argument("app-path", type=str)
+    parser.add_argument("--output-path", type=str, default=os.path.join(project_path, "data"))
+    parser.add_argument("--port-image", type=int, default=8000, help="Port for the image server")
+    parser.add_argument('--dr_cell_file_paths', nargs='*', help='List of DrCELL files', default=[], required=True)
+    parser.add_argument('--debug', type=bool, default=False, help='Enable debug mode')
+    parser.add_argument('--experimental', type=bool, default=False, help='Enable experimental mode')
+    # Parse arguments using the provided argv
+    args = parser.parse_args(argv)
+    return args
+
+
+def plot_bokeh(input_file_paths: list[str], reduction_functions: list[DimensionalReductionObject] = None,
+               bokeh_show: bool = True, output_path: str = "./data/output/", debug: bool = False,
+               experimental: bool = False,
                hover_image_generation_function=None,
-               color_palette=Muted9, image_server_port=8000):
+               color_palette: tuple[str] = Muted9, image_server_port: int = 8000) -> None:
     reduction_functions_config_path = os.path.abspath('./drcell/config/reduction_functions_config.json')
+    drcell_files = []
+    for path in input_file_paths:
+        if drcell.util.validate_drcell_file(path):
+            drcell_files.append(path)
+        else:
+            print(f"{path} is not a valid DrCELL h5 file")
+    input_file_paths = drcell_files
+    # TODO throw error if no valid input file
+
     # TODO make Application class with those as attributes instead of global variables
     current_dataset = None
     current_pca_preprocessed_dataset = None
@@ -581,7 +620,7 @@ def plot_bokeh(input_file_paths, reduction_functions=None,
     def update_current_dataset(dataset, pca_preprocessed_dataset, image_server=None):
         nonlocal current_dataset, current_pca_preprocessed_dataset
         current_dataset = dataset
-        current_pca_preprocessed_dataset= pca_preprocessed_dataset
+        current_pca_preprocessed_dataset = pca_preprocessed_dataset
         if not image_server is None:
             image_server.update_dataset(current_dataset)
             image_server.update_pca_preprocessed_dataset(current_pca_preprocessed_dataset)
@@ -810,11 +849,12 @@ def plot_bokeh(input_file_paths, reduction_functions=None,
             buffer_parameters_status.text = "Start buffering"
             print("Start buffering")
 
-            reduction_functions[select_dimensional_reduction.value].buffer_DR_in_paramter_range(datas[select_data.value],
-                                                                                                file_folder_paths[
-                                                                                                    select_data.value],
-                                                                                                pca_preprocessing=enable_pca_checkbox.active,
-                                                                                                pca_n_components=select_pca_dimensions_slider.value)
+            reduction_functions[select_dimensional_reduction.value].buffer_DR_in_paramter_range(
+                datas[select_data.value],
+                file_folder_paths[
+                    select_data.value],
+                pca_preprocessing=enable_pca_checkbox.active,
+                pca_n_components=select_pca_dimensions_slider.value)
             buffer_parameters_status.visible = False
             print("Finished buffering")
 
@@ -891,3 +931,16 @@ def plot_bokeh(input_file_paths, reduction_functions=None,
     update_stats()
     update_graph(attr=None, old=None, new=None)
     print("Finished loading Bokeh Plotting Interface")
+
+
+if __name__ == '__main__':
+    bokeh_show = True
+else:
+    bokeh_show = False
+args = parse_arguments(sys.argv)
+color_palette = Paired12
+# loads bokeh interface
+plot_bokeh(args.dr_cell_file_paths, reduction_functions=None,
+           bokeh_show=bokeh_show, color_palette=color_palette, debug=args.debug,
+           experimental=args.experimental, output_path=args.output_path,
+           image_server_port=args.port_image)

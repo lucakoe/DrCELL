@@ -5,7 +5,6 @@ from drcell.dimensionalReduction.DimensionalReductionObject import DimensionalRe
 
 class TSNEDRObject(DimensionalReductionObject):
     def __init__(self, params: dict = None):
-        # TODO maybe check for config file here and if not there go to hardcoded values
         if params is None:
             params = {
                 "numerical_parameters": {
@@ -28,10 +27,3 @@ class TSNEDRObject(DimensionalReductionObject):
             kwargs = self.get_default_params()
         tsne_operator = sklearn.manifold.TSNE(*args, **kwargs)
         return tsne_operator.fit_transform(data)
-
-def generate_t_sne(data, perplexity=30, learning_rate=200, n_iter=1000, early_exaggeration=12, angle=0.5,
-                   metric="euclidean", n_components=2):
-    tsne_operator = sklearn.manifold.TSNE(perplexity=perplexity, learning_rate=learning_rate, n_iter=n_iter,
-                                          early_exaggeration=early_exaggeration, angle=angle,
-                                          metric=metric, n_components=n_components)
-    return tsne_operator.fit_transform(data)

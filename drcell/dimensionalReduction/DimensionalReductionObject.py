@@ -5,12 +5,13 @@ from abc import abstractmethod
 import numpy as np
 import sklearn.decomposition
 from matplotlib import pyplot as plt
+
 from drcell.util.generalUtil import get_decimal_places
 
 
 class DimensionalReductionObject:
     @staticmethod
-    def apply_pca_preprocessing(data, n_components=2, show_diagnostic_plot=False):
+    def apply_pca_preprocessing(data, n_components: int = 2, show_diagnostic_plot: bool = False):
         """
         Apply PCA preprocessing to the input data.
 
@@ -56,6 +57,14 @@ class DimensionalReductionObject:
         return plt
 
     def __init__(self, name: str, params: dict, diagnostic_functions: dict = None):
+        """
+        Initializes a DimensionalReductionObject.
+
+        Args:
+            name (str): The name of the object.
+            params (dict): The parameters for the object.
+            diagnostic_functions (dict, optional): The diagnostic functions for the object. Defaults to None.
+        """
         self.name = name
         self.params = params
         if diagnostic_functions is None:
@@ -63,7 +72,7 @@ class DimensionalReductionObject:
         else:
             self.diagnostic_functions = diagnostic_functions
         # default params file
-        self.build_in_params=self.params
+        self.build_in_params = self.params
         self.dimensional_reduction_out_dump_data = {}
 
     @classmethod
@@ -91,9 +100,10 @@ class DimensionalReductionObject:
     def reduce_dimensions(self, data, params: dict):
         pass
 
-    def get_dimensional_reduction_out(self, data, dump_folder_path, reduction_params,
-                                      pca_preprocessing=False, pca_n_components=2, show_pca_diagnostic_plot=False,
-                                      output_buffer_param_dump_filename_extension="_parameter_buffer_dump.pkl"):
+    def get_dimensional_reduction_out(self, data, dump_folder_path: str, reduction_params: dict,
+                                      pca_preprocessing: bool = False, pca_n_components: int = 2,
+                                      show_pca_diagnostic_plot: bool = False,
+                                      output_buffer_param_dump_filename_extension: str = "_parameter_buffer_dump.pkl"):
         dataset_name = os.path.basename(dump_folder_path)
         dump_file_path = os.path.join(dump_folder_path,
                                       f"{self.name}" + output_buffer_param_dump_filename_extension)
@@ -227,11 +237,12 @@ class DimensionalReductionObject:
     def get_DR_parameters_dict(self):
         return self.params.copy()
 
-    def change_params(self, params:dict = None):
+    def change_params(self, params: dict = None):
         if params is None:
             self.params = self.build_in_params
         else:
             self.params = params
+
     def get_name(self) -> str:
         return self.name
 

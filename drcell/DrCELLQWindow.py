@@ -10,13 +10,15 @@ from drcell.server import DrCELLBokehServer
 # PyQt window class
 class DrCELLQWindow(QMainWindow):
 
-    def __init__(self, q_application: QApplication, port=5000, port_image=8000, app_path=None):
+    def __init__(self, file_or_folder_path: str, q_application: QApplication, port=5000, port_image=8000,
+                 app_path=None):
         super().__init__()
         self.port = port
         self.port_image = port_image
         self.q_app = q_application
         self.app_path = app_path
-        self.dr_cell_server = DrCELLBokehServer(port=self.port, port_image=self.port_image,
+        self.dr_cell_server = DrCELLBokehServer(file_or_folder_path=file_or_folder_path, port=self.port,
+                                                port_image=self.port_image,
                                                 app_path=self.app_path)
         self.init_ui()
 

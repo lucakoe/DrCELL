@@ -2,16 +2,12 @@ import umap
 import umap.plot
 from matplotlib import pyplot as plt
 
-import drcell.util.drCELLFileUtil
 from drcell.dimensionalReduction.DimensionalReductionObject import DimensionalReductionObject
 
 
 class UMAPDRObject(DimensionalReductionObject):
-
     def __init__(self, params: dict = None):
         self.diagnostic_functions = {"diagnostic_plots": self.generate_umap_diagnostic_plots}
-
-        # TODO maybe check for config file here and if not there go to hardcoded values
         if params is None:
             params = {
                 "numerical_parameters": {
@@ -32,9 +28,6 @@ class UMAPDRObject(DimensionalReductionObject):
 
     def generate_umap_diagnostic_plots(self, data, *args, **kwargs):
         umap_object = umap.UMAP(*args, **kwargs)
-        return self.generate_diagnostic_plots(umap_object, data)
-
-    def generate_diagnostic_plots(self, umap_object, data):
         mapper = umap_object.fit(data)
         umap.plot.diagnostic(mapper, diagnostic_type='pca')
         plt.show()
