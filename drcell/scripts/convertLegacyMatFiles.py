@@ -1,30 +1,33 @@
+import argparse
+import glob
 import os
+import sys
 
 import drcell
 
 if __name__ == "__main__":
     # Parse command-line arguments
-    # parser = argparse.ArgumentParser(description="Convert Legacy .mat files to DrCell .h5 files")
-    # parser.add_argument("--type", type=str, default=None, help="Type of recording (Ephys, 2P or None)")
+    parser = argparse.ArgumentParser(description="Convert Legacy .mat files to DrCell .h5 files")
+    parser.add_argument("file_or_folder_path", type=str, default=sys.argv[0],
+                        help="Path to the DrCELL file or folder containing the DrCELL files.")
+    parser.add_argument("--type", type=str, default=None, help="Type of recording(s) (Ephys, 2P or None)")
 
-    # TODO finish integrating into CLI
-    data_path = r"C:\path\to\datafolder"
-    included_legacy_matlab_datasets = [
-        # ("20240313_091532_MedianChoiceStim30trials_AllTasks_ForLuca.mat", "2P"),
-        ("2P_Test.mat", "2P"),
-        # ("AllDataMMMatrixZscoredv3.mat", "Ephys"),
-        # ("AllDataMMMatrixZscoredBin1.mat", "Ephys")
-    ]
+    args = parser.parse_args()
+    mat_file_paths = []
+    if os.path.isdir(args.file_or_folder_path):
+        for path in glob.glob(os.path.join(args.file_or_folder_path, '*.mat')):
+            mat_file_paths.append(os.path.abspath(path))
+    elif os.path.isfile(args.file_or_folder_path):
+        mat_file_paths = [args.file_or_folder_path]
 
-    for matlab_dataset in included_legacy_matlab_datasets:
-        input_matlab_file_path = os.path.join(data_path, matlab_dataset[0])
-        recording_type = matlab_dataset[1]
+    for matlab_dataset in mat_file_paths:
+        recording_type = args.type
 
-        print(f"Converting {input_matlab_file_path} to DrCELL .h5 files")
-        converted_input_file_paths = drcell.util.drCELLFileUtil.convert_data_AD_IL(input_matlab_file_path,
+        print(f"Converting {os.path.basename(matlab_dataset)} to DrCELL .h5 files")
+        converted_input_file_paths = drcell.util.drCELLFileUtil.convert_data_AD_IL(matlab_dataset,
                                                                                    os.path.dirname(
-                                                                                       input_matlab_file_path),
+                                                                                       matlab_dataset),
                                                                                    recording_type=recording_type)
         print(f"Converted files: {converted_input_file_paths}")
 
-    # args = parser.parse_args()
+
