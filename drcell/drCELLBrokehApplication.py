@@ -78,7 +78,8 @@ def plot_bokeh(input_file_paths: list[str], reduction_functions: list[Dimensiona
 
     reduction_functions = [drcell.dimensionalReduction.UMAPDRObject(),
                            drcell.dimensionalReduction.TSNEDRObject(),
-                           drcell.dimensionalReduction.PHATEDRObject()] + reduction_functions
+                           drcell.dimensionalReduction.PHATEDRObject(),
+                           drcell.dimensionalReduction.CEBRADRObject()] + reduction_functions
     default_reduction_function_name = reduction_functions[0].name
     # loads parameters and default values from config file
     if os.path.exists(reduction_functions_config_path):

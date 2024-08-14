@@ -8,12 +8,13 @@ class CustomDimensionalReductionObjectExample(DimensionalReductionObject):
                                      "custom_diagnostic_function_n": self.custom_diagnostic_function_n}
         if params is None:
             params = {
-                "numeric_parameters": {"numeric_example_parameter_1": {"start": 5, "end": 50, "step": 1, "value": 30},
-                                       "numeric_example_parameter_2": {"start": 10, "end": 200, "step": 10,
-                                                                       "value": 200},
-                                       "numeric_example_parameter_n": {"start": 250, "end": 1000, "step": 10,
-                                                                       "value": 1000},
-                                       },
+                "numerical_parameters": {
+                    "numerical_example_parameter_1": {"start": 5, "end": 50, "step": 1, "value": 30},
+                    "numerical_example_parameter_2": {"start": 10, "end": 200, "step": 10,
+                                                      "value": 200},
+                    "numerical_example_parameter_n": {"start": 250, "end": 1000, "step": 10,
+                                                      "value": 1000},
+                    },
                 "bool_parameters": {"bool_example_parameter_1": False, "bool_example_parameter_2": True,
                                     "bool_example_parameter_n": False},
                 "nominal_parameters": {
