@@ -5,17 +5,17 @@
 - Download CELL
 - create conda enviroment based on the enviroment.yml file
 	- open shell or CMD
-	- `cd /path/to/CELL`
-	- `conda env create -f environment.yml --name CELLenv`
+	- `cd /path/to/DrCELL`
+	- `conda env create -f environment.yml --name DrCELL`
 ## Run CELL:
 - adjust data path in main.py
-- start CELL
-	- `cd /path/to/CELL`
-	- `conda activate CELLenv`
+- start DrCELL
+	- `cd /path/to/DrCELL`
+	- `conda activate DrCELL`
 - open CELL in extra window
- 	- `python startApplication.py`
+ 	- `python -m drcell.scripts.startApplication "/path/to/data"`
 - alternativly open CELL in browser
-	- `python startBokehServer.py --port 5000` or `bokeh serve .\main.py --port 5000`
+	- `python -m drcell.scripts.startBokehServer "/path/to/data" --port 5000`
   	- open [](http://localhost:5000)http://localhost:5000 in a browser 
 
 ## How to use:
