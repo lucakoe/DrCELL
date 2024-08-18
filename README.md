@@ -1,5 +1,8 @@
-# Cluster Exploration and Labeling Library
-
+# ![DrCELL Banner](drcell/resources/banner.png) 
+# DrCELL - Dimensional reduction Cluster Exploration and Labeling Library
+![DrCELL Interface](misc/media/media1.gif)
+![DrCELL Interface](misc/media/media2.gif)
+![DrCELL Interface](misc/media/media3.gif)
 ## Installation Instructions:
 - Download and install conda.
 - Download CELL
