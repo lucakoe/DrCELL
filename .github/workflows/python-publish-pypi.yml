@@ -34,7 +34,7 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/')  # only publish to PyPI on tag pushes
     needs:
     - build
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     environment:
       name: pypi
       url: https://pypi.org/p/drcell 
@@ -55,7 +55,7 @@ jobs:
       and upload them to GitHub Release
     needs:
     - publish-to-pypi
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
 
     permissions:
       contents: write  # IMPORTANT: mandatory for making GitHub Releases
@@ -96,7 +96,7 @@ jobs:
     name: Publish Python distribution to TestPyPI
     needs:
     - build
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     environment:
       name: pypi
       url: https://test.pypi.org/p/drcell 
