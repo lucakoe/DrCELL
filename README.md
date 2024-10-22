@@ -11,7 +11,7 @@
     - `cd /path/to/DrCELL`
     - `conda env create -f environment.yml --name DrCELL`
 
-## Run CELL:
+## Run DrCELL:
 
 - start DrCELL
     - `cd /path/to/DrCELL`
@@ -21,6 +21,21 @@
 - alternatively open CELL in browser
     - `python -m drcell.scripts.startBokehServer "/path/to/data" --port 5000`
         - open [](http://localhost:5000)http://localhost:5000 in a browser
+
+## Install and run DrCELL with pip (EXPERIMENTAL):
+
+- install python on your system
+- install DrCELL via pip:
+    -  `pip install drcell`
+- start DrCELL
+    - `cd /path/to/DrCELL`
+    - `conda activate DrCELL`
+- open CELL in extra window
+    - `drcell-app "/path/to/data"`
+- alternatively open CELL in browser
+    - `drcell-server "/path/to/data" --port 5000`
+
+
 
 ## How to use:
 - Import your data in the DrCELL format (take a look at the [Getting Started Notebook](drcell/example/gettingStarted.ipynb))
