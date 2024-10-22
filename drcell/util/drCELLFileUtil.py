@@ -7,7 +7,6 @@ import pandas as pd
 from scipy import io as sio
 
 
-# TODO fix weird behavior when converting data to h5 and back
 def save_as_dr_cell_h5(file: str, data_df: pd.DataFrame, legend_df: pd.DataFrame, config: dict = None) -> None:
     # Save dataframes and config to HDF5
     with h5py.File(file, 'w') as hdf:
@@ -73,6 +72,7 @@ def determine_column_type(column_data):
 
 def save_dataframe_to_hdf5(h5file, df, name):
     group = h5file.create_group(name)
+    group.attrs['column_order'] = df.columns.tolist()
     for i, col in enumerate(df.columns):
         column_data = df[col]
         column_type = determine_column_type(column_data)
@@ -86,7 +86,8 @@ def save_dataframe_to_hdf5(h5file, df, name):
             dataset = group.create_dataset(col_name, data=column_data.values, dtype=dtype)
         elif column_type == 'numeric':
             column_data = pd.to_numeric(column_data, errors='coerce')
-            dataset = group.create_dataset(col_name, data=column_data.values)
+            dataset = group.create_dataset(col_name, data=column_data.values, dtype='float64')
+
         elif column_type == 'boolean':
             column_data = column_data.map({True: 'True', False: 'False'}).fillna('NaN')
             dtype = h5py.special_dtype(vlen=str)
@@ -98,6 +99,38 @@ def save_dataframe_to_hdf5(h5file, df, name):
 
         # Save the type information as metadata
         dataset.attrs['dtype'] = column_type
+
+    df_loaded = load_dataframe_from_hdf5(h5file, name)
+    column_names = []
+    for i, col in enumerate(df.columns):
+        column_data = df[col]
+        column_type = determine_column_type(column_data)
+
+        # Use column index as name if no column name is provided
+        column_names.append(str(col) if col is not None else f"col_{i}")
+
+    df_loaded = df_loaded.reset_index(drop=True)
+    df_copy = df.copy()
+    df_copy = df_copy.reset_index(drop=True)
+    if not df.equals(df_loaded):
+        df_copy.columns = column_names
+
+        # Compare two DataFrames element-wise
+        comparison = df_copy != df_loaded
+
+        # Find the indices where there are differences
+        diff_indices = np.where(comparison)
+
+        # Convert to a list of index/column pairs (row, col) for easy reference
+        diff_entries = list(zip(diff_indices[0], diff_indices[1]))
+
+        # Optional: Get the actual differences in values
+        diff_values = [(df_copy.iat[row, col], df_loaded.iat[row, col]) for row, col in diff_entries]
+
+        if len(diff_values) != 0 or len(diff_entries) != 0:
+            # Output indices and values
+            print("Differences found at the following indices (row, col):", diff_entries)
+            print("Differences in values:", diff_values)
 
 
 def load_dataframe_from_hdf5(h5file, name):
@@ -114,7 +147,7 @@ def load_dataframe_from_hdf5(h5file, name):
             values = dataset[:]
             if dtype == 'numeric':
                 if np.issubdtype(values.dtype, np.floating):
-                    data[col] = np.where(np.isnan(values), np.nan, values)
+                    data[col] = np.where(np.isnan(values), np.nan, values.astype('float64'))
                 elif np.issubdtype(values.dtype, np.integer):
                     data[col] = values.astype(int)
             elif dtype == 'boolean':
@@ -122,6 +155,14 @@ def load_dataframe_from_hdf5(h5file, name):
                 data[col] = pd.Series(values).replace({'NaN': np.nan, 'True': True, 'False': False}).values
 
     df = pd.DataFrame(data)
+    column_order = []
+
+    i = 0
+    for col in group.attrs['column_order']:
+        column_order.append(str(col) if col is not None else f"col_{i}")
+        i += 1
+    df = df[column_order]
+    # df.index = group.attrs['row_order']
     return df
 
 
