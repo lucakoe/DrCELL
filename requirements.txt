@@ -4,8 +4,6 @@
 #
 #    pip-compile
 #
-argparse==1.4.0
-    # via -r requirements.in
 bleach==6.1.0
     # via panel
 blosc2==2.5.1

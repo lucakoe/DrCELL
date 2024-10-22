@@ -10,6 +10,5 @@ h5py
 umap-learn
 umap-learn[plot]
 dask[dataframe]
-argparse
 hdbscan==0.8.33
 tables
