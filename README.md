@@ -27,9 +27,6 @@
 - install python on your system
 - install DrCELL via pip:
     -  `pip install drcell`
-- start DrCELL
-    - `cd /path/to/DrCELL`
-    - `conda activate DrCELL`
 - open CELL in extra window
     - `drcell-app "/path/to/data"`
 - alternatively open CELL in browser
