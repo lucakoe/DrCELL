@@ -7,42 +7,24 @@ import pandas as pd
 from scipy import io as sio
 
 
+# TODO fix weird behavior when converting data to h5 and back
 def save_as_dr_cell_h5(file: str, data_df: pd.DataFrame, legend_df: pd.DataFrame, config: dict = None) -> None:
-    # TODO maybe change to easier hdf5 structure for direct matlab export
     # Save dataframes and config to HDF5
     with h5py.File(file, 'w') as hdf:
-
-        # first version
-        # # Convert DataFrames to numpy arrays and process them
-        # data_df_compatible = np.array(
-        #     [convert_to_hdf5_compatible(data_df[col].to_numpy()) for col in data_df.columns]).T
-        # legend_df_compatible = np.array(
-        #     [convert_to_hdf5_compatible(legend_df[col].to_numpy()) for col in legend_df.columns]).T
-        #
-        # # Save dataframes as datasets
-        # hdf.create_dataset('data_df', data=data_df_compatible)
-        # hdf.create_dataset('legend_df', data=legend_df_compatible)
-        #
-        # # Add dataframe columns as attributes
-        # hdf['data_df'].attrs['columns'] = data_df.columns.tolist()
-        # hdf['legend_df'].attrs['columns'] = legend_df.columns.tolist()
+        # Create HDF5 file and store DataFrames
+        save_dataframe_to_hdf5(hdf, data_df, 'data_df')
+        save_dataframe_to_hdf5(hdf, legend_df, 'legend_df')
 
         if config is not None:
             # Save config as attributes
             for key, value in config.items():
                 hdf.attrs[key] = value
 
-    with pd.HDFStore(file) as store:
-        store.append('data_df', data_df)
-        store.append('legend_df', legend_df)
-
 
 def load_dr_cell_h5(file: str) -> (pd.DataFrame, pd.DataFrame, dict):
     with h5py.File(file, 'r') as hdf:
-        # first version
-        # # Read dataframes
-        # data_df = pd.DataFrame(hdf['data_df'][:], columns=hdf['data_df'].attrs['columns'])
-        # legend_df = pd.DataFrame(hdf['legend_df'][:], columns=hdf['legend_df'].attrs['columns'])
+        data_df = load_dataframe_from_hdf5(hdf, 'data_df')
+        legend_df = load_dataframe_from_hdf5(hdf, 'legend_df')
 
         # Read config from attributes
         config = {key: hdf.attrs[key] for key in hdf.attrs}
@@ -50,10 +32,6 @@ def load_dr_cell_h5(file: str) -> (pd.DataFrame, pd.DataFrame, dict):
             with open('default_file_config.json', 'r') as json_file:
                 config = json.load(json_file)
 
-    # Read DataFrames from the HDF5 file
-    with pd.HDFStore(file) as store:
-        data_df = store['data_df']
-        legend_df = store['legend_df']
     return data_df, legend_df, config
 
 
@@ -62,18 +40,89 @@ def validate_drcell_file(file: str) -> bool:
         data_df, legend_df, config = load_dr_cell_h5(file)
     except Exception:
         return False
-    if isinstance(data_df, pd.DataFrame) and isinstance(legend_df, pd.DataFrame) and (
-            config is None or isinstance(config, dict)):
-        return True
-    else:
+    if not (isinstance(data_df, pd.DataFrame) and isinstance(legend_df, pd.DataFrame) and (
+            config is None or isinstance(config, dict))):
         return False
 
+    # if config is not None and (
+    #         "recording_type" not in config.keys() or "data_variables" not in config.keys() or "display_hover_variables" not in config.keys()):
+    #     return False
+    # # checks if all the variables in the config are in the dataframes
+    # if config is not None and (all(value in config["data_variables"] for value in legend_df.columns.tolist()) or all(
+    #         value in config["display_hover_variables"] for value in legend_df.columns.tolist())):
+    #     print("Invalid config")
+    #     return False
 
-def convert_to_hdf5_compatible(array):
-    # Convert object dtypes to fixed-length byte strings
-    if array.dtype == object:
-        return array.astype(str).astype('S')
-    return array
+    return True
+
+
+def determine_column_type(column_data):
+    """
+    Determine the type of the column data.
+    """
+    if column_data.dropna().apply(lambda x: isinstance(x, str)).all():
+        return 'string'
+    if column_data.dropna().apply(lambda x: isinstance(x, bool)).all():
+        return 'boolean'
+    try:
+        pd.to_numeric(column_data, errors='raise')
+        return 'numeric'
+    except ValueError:
+        return 'mixed'  # If neither string nor numeric
+
+
+def save_dataframe_to_hdf5(h5file, df, name):
+    group = h5file.create_group(name)
+    for i, col in enumerate(df.columns):
+        column_data = df[col]
+        column_type = determine_column_type(column_data)
+
+        # Use column index as name if no column name is provided
+        col_name = str(col) if col is not None else f"col_{i}"
+
+        if column_type == 'string':
+            column_data = column_data.fillna('')
+            dtype = h5py.special_dtype(vlen=str)
+            dataset = group.create_dataset(col_name, data=column_data.values, dtype=dtype)
+        elif column_type == 'numeric':
+            column_data = pd.to_numeric(column_data, errors='coerce')
+            dataset = group.create_dataset(col_name, data=column_data.values)
+        elif column_type == 'boolean':
+            column_data = column_data.map({True: 'True', False: 'False'}).fillna('NaN')
+            dtype = h5py.special_dtype(vlen=str)
+            dataset = group.create_dataset(col_name, data=column_data.values, dtype=dtype)
+        else:
+            column_data = column_data.fillna('')
+            dtype = h5py.special_dtype(vlen=str)
+            dataset = group.create_dataset(col_name, data=column_data.values, dtype=dtype)
+
+        # Save the type information as metadata
+        dataset.attrs['dtype'] = column_type
+
+
+def load_dataframe_from_hdf5(h5file, name):
+    group = h5file[name]
+    data = {}
+    for col in group:
+        dataset = group[col]
+        dtype = dataset.attrs['dtype']  # Retrieve the type information from metadata
+
+        if dtype == 'string':
+            values = [s.decode('utf-8') if isinstance(s, bytes) else s for s in dataset[:]]
+            data[col] = pd.Series(values).replace('', np.nan).values
+        else:
+            values = dataset[:]
+            if dtype == 'numeric':
+                if np.issubdtype(values.dtype, np.floating):
+                    data[col] = np.where(np.isnan(values), np.nan, values)
+                elif np.issubdtype(values.dtype, np.integer):
+                    data[col] = values.astype(int)
+            elif dtype == 'boolean':
+                values = [v.decode('utf-8') if isinstance(v, bytes) else v for v in values]
+                data[col] = pd.Series(values).replace({'NaN': np.nan, 'True': True, 'False': False}).values
+
+    df = pd.DataFrame(data)
+    return df
 
 
 def load_and_preprocess_mat_data_AD_IL(c_file: str, recording_type: str = '2P'):
@@ -252,7 +301,8 @@ def load_and_preprocess_example_mat_data(c_file: str):
                                       "depth", "mice_session_c0", "mice_session_c1", "mice_session_c2",
                                       "mice_session_c3"])
     # variables from the input data, that is selectable in the Color and Filter setting
-    data_variables = ["cell_type", "photoinhibition", "Task", "RedNeurons"]
+    data_variables = ["cell_type", "photoinhibition", "activity_mode_w_c0", "activity_mode_w_c1",
+                      "activity_mode_w_c2", ]
     # variables from the input data, that gets displayed in the hover tool
     display_hover_variables = ["pdIndex", "depth", "cell_type", "photoinhibition"]
     config = {

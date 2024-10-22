@@ -1,6 +1,8 @@
+import os.path
 from threading import Thread
 
 from PyQt5.QtCore import QUrl
+from PyQt5.QtGui import QIcon
 from PyQt5.QtWebEngineWidgets import QWebEngineView
 from PyQt5.QtWidgets import QMainWindow, QVBoxLayout, QWidget, QApplication
 
@@ -20,10 +22,14 @@ class DrCELLQWindow(QMainWindow):
         self.dr_cell_server = DrCELLBokehServer(file_or_folder_path=file_or_folder_path, port=self.port,
                                                 port_image=self.port_image,
                                                 app_path=self.app_path)
+        icon_path = os.path.join(os.path.dirname(__file__), 'resources', 'logo.jpg')
+        if os.path.exists(icon_path):
+            icon = QIcon(icon_path)
+            self.setWindowIcon(icon)
         self.init_ui()
 
     def init_ui(self):
-        self.setWindowTitle('Dimensional reduction Cluster Exploration and Labeling Library')
+        self.setWindowTitle('DrCELL - Dimensional reduction Cluster Exploration and Labeling Library')
         # Start Bokeh server in a separate thread
         self.bokeh_thread = Thread(target=self.dr_cell_server.start_server)
         self.bokeh_thread.start()

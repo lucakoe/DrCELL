@@ -3,7 +3,8 @@ import sys
 
 from drcell import DrCELLBokehServer
 
-if __name__ == "__main__":
+
+def main():
     # Parse command-line arguments
     parser = argparse.ArgumentParser(description="Run Bokeh server with custom app.")
     parser.add_argument("--port", type=int, default=5000, help="Port for the Bokeh server")
@@ -17,3 +18,7 @@ if __name__ == "__main__":
     drcell_server.start_server()
     input("Press Enter to stop the server...")
     drcell_server.stop_server()
+
+
+if __name__ == '__main__':
+    main()

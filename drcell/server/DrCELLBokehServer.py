@@ -20,7 +20,7 @@ class DrCELLBokehServer:
         if self.app_path is None:
             # Load the script from the specified package and module
             package_name = "drcell"
-            module_name = "drCELLBrokehApplication"
+            module_name = "DrCELLBrokehApplication"
 
             spec = importlib.util.find_spec(f"{package_name}.{module_name}")
             if spec is None:

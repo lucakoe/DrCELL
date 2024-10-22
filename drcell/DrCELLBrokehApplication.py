@@ -42,7 +42,7 @@ def parse_arguments(argv: list) -> argparse.Namespace:
     """
     parser = argparse.ArgumentParser(description="Bokeh Application Arguments")
     parser.add_argument("app-path", type=str)
-    parser.add_argument("--output-path", type=str, default=os.path.join(project_path, "data"))
+    parser.add_argument("--output-path", type=str, default=None, help="Path to save the output files")
     parser.add_argument("--port-image", type=int, default=8000, help="Port for the image server")
     parser.add_argument('--dr_cell_file_paths', nargs='*', help='List of DrCELL files', default=[], required=True)
     parser.add_argument('--debug', type=bool, default=False, help='Enable debug mode')
@@ -53,7 +53,7 @@ def parse_arguments(argv: list) -> argparse.Namespace:
 
 
 def plot_bokeh(input_file_paths: list[str], reduction_functions: list[DimensionalReductionObject] = None,
-               bokeh_show: bool = True, output_path: str = "./data/output/", debug: bool = False,
+               bokeh_show: bool = True, output_path: str = None, debug: bool = False,
                experimental: bool = False,
                hover_image_generation_function=None,
                color_palette: tuple[str] = Muted9, image_server_port: int = 8000) -> None:
@@ -79,7 +79,8 @@ def plot_bokeh(input_file_paths: list[str], reduction_functions: list[Dimensiona
     reduction_functions = [drcell.dimensionalReduction.UMAPDRObject(),
                            drcell.dimensionalReduction.TSNEDRObject(),
                            drcell.dimensionalReduction.PHATEDRObject(),
-                           drcell.dimensionalReduction.CEBRADRObject()] + reduction_functions
+                           # drcell.dimensionalReduction.CEBRADRObject()
+                           ] + reduction_functions
     default_reduction_function_name = reduction_functions[0].name
     # loads parameters and default values from config file
     if os.path.exists(reduction_functions_config_path):
@@ -100,8 +101,11 @@ def plot_bokeh(input_file_paths: list[str], reduction_functions: list[Dimensiona
 
     for file in input_file_paths:
         title = os.path.splitext(os.path.basename(file))[0]
-        file_folder_paths[title] = drcell.util.generalUtil.create_file_folder_structure(output_path, title)
-
+        if output_path is not None:
+            file_folder_paths[title] = drcell.util.generalUtil.create_file_folder_structure(output_path, title)
+        else:
+            file_folder_paths[title] = drcell.util.generalUtil.create_file_folder_structure(os.path.dirname(file),
+                                                                                            title)
         datas[title], legend_dfs[title], configs[title] = drcell.util.drCELLFileUtil.load_dr_cell_h5(file)
         # TODO check if its alright for datas to be a df. otherwise convert it here to np array
         datas[title] = datas[title].to_numpy()
@@ -565,8 +569,7 @@ def plot_bokeh(input_file_paths: list[str], reduction_functions: list[Dimensiona
                 # makes a dataframe with just the filtered entries and merges it with the other selected values
                 filter_df = current_df[
                     current_df[options_filter_multi_choice_values[option][0]] ==
-                    options_filter_multi_choice_values[option][
-                        1]]
+                    options_filter_multi_choice_values[option][1]]
                 datasource_df = pd.merge(datasource_df, filter_df, how='outer')
 
             datasource_df = datasource_df.drop_duplicates(keep="first")

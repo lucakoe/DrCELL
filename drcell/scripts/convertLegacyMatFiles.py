@@ -5,7 +5,8 @@ import sys
 
 import drcell
 
-if __name__ == "__main__":
+
+def main():
     # Parse command-line arguments
     parser = argparse.ArgumentParser(description="Convert Legacy .mat files to DrCell .h5 files")
     parser.add_argument("file_or_folder_path", type=str, default=sys.argv[0],
@@ -31,3 +32,5 @@ if __name__ == "__main__":
         print(f"Converted files: {converted_input_file_paths}")
 
 
+if __name__ == '__main__':
+    main()

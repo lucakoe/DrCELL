@@ -3,7 +3,8 @@ import argparse
 
 from drcell.server.ImageServer import ImageServer
 
-if __name__ == '__main__':
+
+def main():
     parser = argparse.ArgumentParser(description='Start an image generation server.')
     parser.add_argument('--port', type=int, default=8000, help='Port number for the server (default: 8000)')
     args = parser.parse_args()
@@ -13,3 +14,7 @@ if __name__ == '__main__':
 
     input("Press Enter to stop the server...")
     image_server_instance.stop_server()
+
+
+if __name__ == '__main__':
+    main()

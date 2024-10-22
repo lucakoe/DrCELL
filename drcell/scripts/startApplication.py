@@ -7,7 +7,8 @@ from PyQt5.QtWidgets import QApplication
 
 from drcell.DrCELLQWindow import DrCELLQWindow
 
-if __name__ == '__main__':
+
+def main():
     # Parse command-line arguments
     parser = argparse.ArgumentParser(description="Run Bokeh server with custom app.")
     parser.add_argument("file_or_folder_path", type=str, default=sys.argv[0],
@@ -31,3 +32,7 @@ if __name__ == '__main__':
                                 port_image=args.port_image, app_path=args.app_path)
 
     sys.exit(app.exec_())
+
+
+if __name__ == '__main__':
+    main()
