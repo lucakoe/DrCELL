@@ -25,9 +25,6 @@ setup(
             'drcell-convert-legacy=drcell.scripts.convertLegacyMatFiles:main',
         ],
     },
-    package_data={
-        "my_package": ["resources/logo.jpg"],  # Include the icon in the package
-    },
     python_requires='>=3.6',
     install_requires=[line.strip() for line in open('requirements.txt') if line.strip() and not line.startswith('#')],
 )
