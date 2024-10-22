@@ -1,4 +1,4 @@
-# ![DrCELL Banner](https://github.com/lucakoe/DrCELL/tree/master/drcell/resources/banner.png)
+# ![DrCELL Banner](https://raw.githubusercontent.com/lucakoe/DrCELL/refs/heads/master/drcell/resources/banner.png)
 
 # DrCELL - Dimensional reduction Cluster Exploration and Labeling Library
 
@@ -39,7 +39,7 @@
 
 ### General Tab
 
-![DrCELL Interface General Tab Demo](https://github.com/lucakoe/DrCELL/tree/master/misc/media/media1.gif)
+![DrCELL Interface General Tab Demo](https://raw.githubusercontent.com/lucakoe/DrCELL/refs/heads/master/misc/media/media1.gif)
 
 - You can select the different datasets you added in the "Data" Selection.
 - With the "Color" Selection, you can select the column of your data, you want to be highlighted with color. The
@@ -56,7 +56,7 @@
 
 ### Hyperparameter Optimization
 
-![DrCELL Interface Hyperparameter Optimization Demo](https://github.com/lucakoe/DrCELL/tree/master/misc/media/media3.gif)
+![DrCELL Interface Hyperparameter Optimization Demo](https://raw.githubusercontent.com/lucakoe/DrCELL/refs/heads/master/misc/media/media3.gif)
 
 #### PCA Preprocessing Tab
 
@@ -88,7 +88,7 @@
 
 ### Toolbar
 
-![DrCELL Interface Toolbar and Hover Tool Demo](https://github.com/lucakoe/DrCELL/tree/master/misc/media/media2.gif)
+![DrCELL Interface Toolbar and Hover Tool Demo](https://raw.githubusercontent.com/lucakoe/DrCELL/refs/heads/master/misc/media/media2.gif)
 
 - located on the right side of the plot
 - General Tools
