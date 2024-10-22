@@ -5,7 +5,7 @@ from setuptools import setup, find_packages
 # TODO sphynx
 setup(
     name='drcell',
-    version='0.0.1rc0',
+    version='0.0.1rc1',
     author='Luca K.',
     author_email='pypi@use.startmail.com',
     description='GUI to generate, cluster and optimize dimensionality reduction output',
