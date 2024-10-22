@@ -33,7 +33,6 @@
     - `drcell-server "/path/to/data" --port 5000`
 
 
-
 ## How to use:
 - Import your data in the DrCELL format (take a look at the [Getting Started Notebook](drcell/example/gettingStarted.ipynb))
 - After starting the application (the first launch might take some time), you see the GUI
