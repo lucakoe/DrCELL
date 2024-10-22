@@ -1,4 +1,4 @@
-# ![DrCELL Banner](drcell/resources/banner.png)
+# ![DrCELL Banner](https://github.com/lucakoe/DrCELL/tree/master/drcell/resources/banner.png)
 
 # DrCELL - Dimensional reduction Cluster Exploration and Labeling Library
 
@@ -22,7 +22,7 @@
     - `python -m drcell.scripts.startBokehServer "/path/to/data" --port 5000`
         - open [](http://localhost:5000)http://localhost:5000 in a browser
 
-## Install and run DrCELL with pip (EXPERIMENTAL):
+## Install and run DrCELL with pip (experimental):
 
 - install python on your system
 - install DrCELL via pip:
@@ -34,12 +34,12 @@
 
 
 ## How to use:
-- Import your data in the DrCELL format (take a look at the [Getting Started Notebook](drcell/example/gettingStarted.ipynb))
+- Import your data in the DrCELL format (take a look at the [Getting Started Notebook](https://github.com/lucakoe/DrCELL/tree/master/drcell/example/gettingStarted.ipynb))
 - After starting the application (the first launch might take some time), you see the GUI
 
 ### General Tab
 
-![DrCELL Interface General Tab Demo](misc/media/media1.gif)
+![DrCELL Interface General Tab Demo](https://github.com/lucakoe/DrCELL/tree/master/misc/media/media1.gif)
 
 - You can select the different datasets you added in the "Data" Selection.
 - With the "Color" Selection, you can select the column of your data, you want to be highlighted with color. The
@@ -56,7 +56,7 @@
 
 ### Hyperparameter Optimization
 
-![DrCELL Interface Hyperparameter Optimization Demo](misc/media/media3.gif)
+![DrCELL Interface Hyperparameter Optimization Demo](https://github.com/lucakoe/DrCELL/tree/master/misc/media/media3.gif)
 
 #### PCA Preprocessing Tab
 
@@ -88,7 +88,7 @@
 
 ### Toolbar
 
-![DrCELL Interface Toolbar and Hover Tool Demo](misc/media/media2.gif)
+![DrCELL Interface Toolbar and Hover Tool Demo](https://github.com/lucakoe/DrCELL/tree/master/misc/media/media2.gif)
 
 - located on the right side of the plot
 - General Tools
